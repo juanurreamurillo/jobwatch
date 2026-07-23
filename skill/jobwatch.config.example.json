@@ -1,0 +1,7 @@
+{
+  "terminos": "Gerente de Proyectos TI",
+  "ubicacion": "Colombia",
+  "modalidad": "remoto",
+  "salario_min": null,
+  "excluir": ["ventas", "call center"]
+}
