@@ -37,6 +37,12 @@ def main(argv: list[str] | None = None, _conectores: dict | None = None) -> int:
     p_harvest.add_argument("--tope", type=int, default=50)
     p_harvest.add_argument("--json", action="store_true", help="Emite JSON a stdout.")
 
+    p_report = sub.add_parser("report", help="Valida puntajes y escribe el reporte.")
+    p_report.add_argument("--candidatas", required=True)
+    p_report.add_argument("--scores", required=True)
+    p_report.add_argument("--fecha", default=None)
+    p_report.add_argument("--db", default="jobwatch.db")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "run":
@@ -105,6 +111,44 @@ def main(argv: list[str] | None = None, _conectores: dict | None = None) -> int:
             "candidatas": [_json.loads(v.model_dump_json()) for v in cosecha.candidatas],
         }
         print(_json.dumps(salida, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "report":
+        import json as _json
+
+        from jobwatch.modelos import (
+            Cosecha, EstadoConector, LotePuntajes, ResultadoConector, Vacante,
+        )
+        from jobwatch.nucleo import ScoresInvalidos, reportar, validar_scores
+        from jobwatch.store import Store
+
+        cand = _json.loads(Path(args.candidatas).read_text(encoding="utf-8"))
+        estados = {
+            p: ResultadoConector(estado=EstadoConector(e["estado"]), detalle=e.get("detalle", ""))
+            for p, e in cand["estados"].items()
+        }
+        cosecha = Cosecha(
+            run_id=cand["run_id"], tope=cand["tope"], estados=estados,
+            candidatas=[Vacante(**v) for v in cand["candidatas"]],
+        )
+        lote = LotePuntajes.model_validate_json(Path(args.scores).read_text(encoding="utf-8"))
+
+        store = Store(args.db)
+        try:
+            ofertas = validar_scores(cosecha, lote)
+        except ScoresInvalidos as e:
+            store.cerrar()
+            print(f"Error de validación (scores inválidos): {e}", file=sys.stderr)
+            return 1
+
+        fecha = args.fecha or _dt.date.today().isoformat()
+        md = reportar(cosecha, ofertas, store, fecha)
+        store.cerrar()
+
+        destino = Path("reportes") / f"{fecha}.md"
+        destino.parent.mkdir(exist_ok=True)
+        destino.write_text(md, encoding="utf-8")
+        print(f"Reporte escrito en {destino}")
         return 0
 
     return 1
