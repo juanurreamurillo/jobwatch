@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from jobwatch.modelos import EstadoConector, Vacante
+from jobwatch.modelos import ResultadoConector, Vacante
 
 
 class Store:
@@ -68,8 +68,11 @@ class Store:
         )
         self.con.commit()
 
-    def registrar_corrida(self, estados: dict[str, EstadoConector]) -> int:
-        serializable = {k: e.value for k, e in estados.items()}
+    def registrar_corrida(self, resultados: dict[str, ResultadoConector]) -> int:
+        serializable = {
+            portal: {"estado": r.estado.value, "detalle": r.detalle}
+            for portal, r in resultados.items()
+        }
         cur = self.con.execute(
             "INSERT INTO corridas (estados) VALUES (?)", (json.dumps(serializable),)
         )

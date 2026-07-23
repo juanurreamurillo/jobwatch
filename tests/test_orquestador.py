@@ -20,10 +20,10 @@ def test_solo_puntua_las_nuevas(tmp_path):
     def fake(v, cv):
         puntuadas.append(v.id_nativo)
         return {"puntaje": 70, "razon": "ok"}
-    md, estados = correr(Criterios(terminos="dev"), "cv", store, fake, conectores, "2026-07-23")
+    md, resultados = correr(Criterios(terminos="dev"), "cv", store, fake, conectores, "2026-07-23")
     assert puntuadas == ["2"]           # solo la nueva se puntúa
     assert "2026-07-23" in md
-    assert estados["indeed"] == EstadoConector.OK
+    assert resultados["indeed"].estado is EstadoConector.OK
     store.cerrar()
 
 
@@ -32,8 +32,8 @@ def test_estado_error_se_propaga_al_reporte(tmp_path):
     conectores = {
         "indeed": lambda c: ResultadoConector(estado=EstadoConector.ERROR, detalle="bloqueado"),
     }
-    md, estados = correr(Criterios(terminos="x"), "cv", store, lambda v, cv: {}, conectores, "2026-07-23")
-    assert estados["indeed"] == EstadoConector.ERROR
+    md, resultados = correr(Criterios(terminos="x"), "cv", store, lambda v, cv: {}, conectores, "2026-07-23")
+    assert resultados["indeed"].estado is EstadoConector.ERROR
     assert "ERROR" in md
     store.cerrar()
 

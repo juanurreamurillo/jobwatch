@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from jobwatch.modelos import EstadoConector, Vacante
+from jobwatch.modelos import EstadoConector, ResultadoConector, Vacante
 from jobwatch.store import Store
 
 
@@ -35,10 +35,21 @@ def test_dedup_secundaria_por_fingerprint(tmp_path):
 
 def test_registrar_corrida_devuelve_id_incremental(tmp_path):
     s = Store(str(tmp_path / "t.db"))
-    id1 = s.registrar_corrida({"indeed": EstadoConector.OK})
-    id2 = s.registrar_corrida({"indeed": EstadoConector.ERROR})
+    id1 = s.registrar_corrida({"indeed": ResultadoConector(estado=EstadoConector.OK)})
+    id2 = s.registrar_corrida({"indeed": ResultadoConector(estado=EstadoConector.ERROR)})
     assert id2 > id1
     s.cerrar()
+
+
+def test_registrar_corrida_guarda_estado_y_detalle(tmp_path):
+    import json
+    from jobwatch.modelos import EstadoConector, ResultadoConector
+    store = Store(str(tmp_path / "j.db"))
+    store.registrar_corrida({"indeed": ResultadoConector(estado=EstadoConector.ERROR, detalle="x")})
+    fila = store.con.execute("SELECT estados FROM corridas").fetchone()
+    datos = json.loads(fila[0])
+    assert datos["indeed"] == {"estado": "error", "detalle": "x"}
+    store.cerrar()
 
 
 def test_persistir_guarda_portales(tmp_path):

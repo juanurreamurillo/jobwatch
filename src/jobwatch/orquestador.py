@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 from jobwatch.matcher import filtro_local, puntuar
-from jobwatch.modelos import Criterios, EstadoConector, PRIORIDAD_PORTAL, ResultadoConector, Vacante
+from jobwatch.modelos import Criterios, PRIORIDAD_PORTAL, ResultadoConector, Vacante
 from jobwatch.reporte import render
 from jobwatch.store import Store
 
@@ -38,17 +38,20 @@ def correr(
     conectores: dict[str, Conector],
     fecha: str,
     tope: int = 50,
-) -> tuple[str, dict[str, EstadoConector]]:
-    estados: dict[str, EstadoConector] = {}
-    nuevas = []
+) -> tuple[str, dict[str, ResultadoConector]]:
+    resultados: dict[str, ResultadoConector] = {}
+    cosechadas: list[Vacante] = []
     for nombre, conector in conectores.items():
         r = conector(criterios)
-        estados[nombre] = r.estado
-        for v in r.vacantes:
-            if store.es_nueva(v) and filtro_local(v, criterios):
-                nuevas.append(v)
+        resultados[nombre] = r
+        cosechadas.extend(r.vacantes)
+
+    nuevas = [
+        v for v in colapsar_lote(cosechadas)
+        if store.es_nueva(v) and filtro_local(v, criterios)
+    ]
 
     ofertas = puntuar(nuevas, cv, puntuador, tope=tope)
     store.persistir(nuevas)
-    store.registrar_corrida(estados)
-    return render(fecha, estados, ofertas), estados
+    store.registrar_corrida(resultados)
+    return render(fecha, resultados, ofertas), resultados
