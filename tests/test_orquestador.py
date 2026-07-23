@@ -1,5 +1,6 @@
 from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
-from jobwatch.orquestador import colapsar_lote, correr
+from jobwatch.orquestador import correr
+from jobwatch.nucleo import colapsar_lote
 from jobwatch.store import Store
 
 
