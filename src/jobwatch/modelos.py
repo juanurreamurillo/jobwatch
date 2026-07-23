@@ -53,6 +53,11 @@ def calcular_fingerprint(empresa: str, titulo: str, ubicacion: str) -> str:
     return hashlib.sha256(crudo.encode()).hexdigest()[:16]
 
 
+# Prioridad para elegir la fila canónica al colapsar una oferta vista en varios
+# portales (D11). Orden por estabilidad del id nativo observada en Fase 0.
+PRIORIDAD_PORTAL = ["computrabajo", "elempleo", "magneto", "indeed"]
+
+
 class Criterios(BaseModel):
     terminos: str
     ubicacion: str | None = None
@@ -76,6 +81,7 @@ class Vacante(BaseModel):
     descripcion_raw: str = ""
     id_estable: str = ""
     fingerprint_contenido: str = ""
+    portales: list[str] = []
 
     @model_validator(mode="after")
     def _computar(self) -> "Vacante":
@@ -84,6 +90,8 @@ class Vacante(BaseModel):
             self, "fingerprint_contenido",
             calcular_fingerprint(self.empresa, self.titulo, self.ubicacion),
         )
+        if not self.portales:
+            object.__setattr__(self, "portales", [self.portal])
         return self
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from jobwatch.modelos import EstadoConector, EstadoOferta, OfertaPuntuada
+from jobwatch.modelos import EstadoConector, EstadoOferta, OfertaPuntuada, ResultadoConector
 
 
 def _orden(o: OfertaPuntuada) -> int:
@@ -10,15 +10,16 @@ def _orden(o: OfertaPuntuada) -> int:
 
 def render(
     fecha: str,
-    estados: dict[str, EstadoConector],
+    resultados: dict[str, ResultadoConector],
     ofertas: list[OfertaPuntuada],
 ) -> str:
     lineas = [f"# Vacantes nuevas — {fecha}", ""]
 
     lineas.append("## Estado de conectores")
-    for portal, estado in estados.items():
-        marca = "⚠️ ERROR" if estado is EstadoConector.ERROR else estado.value.upper()
-        lineas.append(f"- **{portal}**: {marca}")
+    for portal, r in resultados.items():
+        marca = "⚠️ ERROR" if r.estado is EstadoConector.ERROR else r.estado.value.upper()
+        extra = f" — {r.detalle}" if r.detalle else ""
+        lineas.append(f"- **{portal}**: {marca}{extra}")
     lineas.append("")
 
     lineas.append(f"## Ofertas ({len(ofertas)})")
@@ -27,10 +28,13 @@ def render(
     for o in sorted(ofertas, key=_orden):
         v = o.vacante
         puntaje = o.puntaje if o.estado is EstadoOferta.PUNTUADA else "—"
+        multi = ""
+        if len(v.portales) > 1:
+            multi = f"\n- Vista en {len(v.portales)} portales: {', '.join(v.portales)}"
         lineas.append(
             f"### [{v.titulo}]({v.url}) · {puntaje}\n"
             f"- Empresa: {v.empresa}\n"
             f"- Ubicación: {v.ubicacion}\n"
-            f"- Motivo: {o.razon}\n"
+            f"- Motivo: {o.razon}{multi}\n"
         )
     return "\n".join(lineas)
