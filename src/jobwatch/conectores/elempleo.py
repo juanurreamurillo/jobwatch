@@ -23,6 +23,8 @@ def _items_jsonld(sopa) -> list[dict]:
             datos = json.loads(script.string or "")
         except Exception:
             continue
+        if not isinstance(datos, dict):
+            continue
         if datos.get("@type") != "ItemList":
             continue
         for el in datos.get("itemListElement", []):

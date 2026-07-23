@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 from jobwatch.matcher import filtro_local, puntuar
-from jobwatch.modelos import Criterios, PRIORIDAD_PORTAL, ResultadoConector, Vacante
+from jobwatch.modelos import Criterios, EstadoConector, PRIORIDAD_PORTAL, ResultadoConector, Vacante
 from jobwatch.reporte import render
 from jobwatch.store import Store
 
@@ -42,7 +42,10 @@ def correr(
     resultados: dict[str, ResultadoConector] = {}
     cosechadas: list[Vacante] = []
     for nombre, conector in conectores.items():
-        r = conector(criterios)
+        try:
+            r = conector(criterios)
+        except Exception as e:  # fail-loud sin abortar la corrida completa (D2)
+            r = ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
         resultados[nombre] = r
         cosechadas.extend(r.vacantes)
 

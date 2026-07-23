@@ -47,8 +47,8 @@ def ejecutar(criterios: Criterios, url_fn, fetch, extraer) -> ResultadoConector:
     fetch = fetch or fetch_curl
     try:
         html = fetch(url_fn(criterios))
+        vacantes, omitidas = extraer(html, criterios)
     except Exception as e:  # fail-loud
         return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
-    vacantes, omitidas = extraer(html, criterios)
     detalle = f"{omitidas} filas omitidas por datos inválidos" if omitidas else ""
     return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes, detalle=detalle)

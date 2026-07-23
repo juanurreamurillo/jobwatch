@@ -46,3 +46,11 @@ def test_ejecutar_fetch_falla_es_error():
     r = ejecutar(Criterios(terminos="t"), lambda c: "u",
                  fetch=boom, extraer=lambda h, c: ([], 0))
     assert r.estado is EstadoConector.ERROR and "403 bloqueado" in r.detalle
+
+
+def test_ejecutar_extraer_falla_es_error():
+    def boom(html, c):
+        raise ValueError("HTML malformado")
+    r = ejecutar(Criterios(terminos="t"), lambda c: "u",
+                 fetch=lambda u: "<html></html>", extraer=boom)
+    assert r.estado is EstadoConector.ERROR and "HTML malformado" in r.detalle

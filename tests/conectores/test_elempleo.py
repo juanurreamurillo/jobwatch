@@ -26,3 +26,24 @@ def test_fetch_falla_es_error():
         raise RuntimeError("timeout")
     r = buscar(Criterios(terminos="x"), fetch=explota)
     assert r.estado is EstadoConector.ERROR and "timeout" in r.detalle
+
+
+def test_ignora_bloque_jsonld_de_array_raiz():
+    """Un bloque JSON-LD raíz-array (común en sitios reales) no debe tumbar
+    el conector; los ítems del ItemList válido se siguen extrayendo."""
+    html = """
+    <html><body>
+    <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "BreadcrumbList"}]</script>
+    <script type="application/ld+json">
+    {"@type": "ItemList", "itemListElement": [
+        {"item": {"@id": "https://www.elempleo.com/co/ofertas-trabajo/dev-123", "name": "Dev"}}
+    ]}
+    </script>
+    <div data-ga4-offerdata='{"id": "123", "title": "Dev", "company": "ACME",
+        "location": "Bogotá", "salary": "Salario confidencial"}'></div>
+    </body></html>
+    """
+    r = buscar(Criterios(terminos="dev"), fetch=lambda url: html)
+    assert r.estado is EstadoConector.OK
+    assert len(r.vacantes) == 1
+    assert r.vacantes[0].id_nativo == "123"

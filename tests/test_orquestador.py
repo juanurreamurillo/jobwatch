@@ -38,6 +38,29 @@ def test_estado_error_se_propaga_al_reporte(tmp_path):
     store.cerrar()
 
 
+def test_correr_backstop_conector_que_lanza_excepcion(tmp_path):
+    store = Store(str(tmp_path / "t.db"))
+
+    def _malo(c):
+        raise RuntimeError("timeout de red")
+
+    v = _v("1")
+    conectores = {
+        "portal_malo": _malo,
+        "indeed": _conector_ok([v]),
+    }
+    md, resultados = correr(
+        Criterios(terminos="dev"), "cv", store, lambda v, cv: {"puntaje": 70, "razon": "ok"},
+        conectores, "2026-07-23",
+    )
+    assert isinstance(md, str)
+    assert resultados["portal_malo"].estado is EstadoConector.ERROR
+    assert "timeout de red" in resultados["portal_malo"].detalle
+    assert resultados["indeed"].estado is EstadoConector.OK
+    assert store.es_nueva(v) is False  # la oferta buena sí quedó persistida
+    store.cerrar()
+
+
 def _vp(portal, empresa="ACME", titulo="Gerente de Proyectos", ubic="Bogotá", idn="1"):
     return Vacante(id_nativo=idn, portal=portal, titulo=titulo, empresa=empresa,
                    ubicacion=ubic, url=f"https://{portal}/{idn}")
