@@ -1,18 +1,27 @@
 from __future__ import annotations
 
+import math
+
 from jobwatch.modelos import (
     Criterios, EstadoConector, Modalidad, ResultadoConector, Vacante,
 )
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 
+def _sin_nan(x):
+    """Coerce pandas NaN (a float) to None; pass everything else through."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return None
+    return x
+
+
 def _id_nativo(fila: dict) -> str:
-    return str(fila.get("id") or fila.get("job_url") or "")
+    return str(_sin_nan(fila.get("id")) or _sin_nan(fila.get("job_url")) or "")
 
 
 def _a_vacante(fila: dict) -> Vacante:
-    smin = fila.get("min_amount")
-    smax = fila.get("max_amount")
+    smin = _sin_nan(fila.get("min_amount"))
+    smax = _sin_nan(fila.get("max_amount"))
     if smin is None and smax is None:
         smin, smax = parsear_salario(str(fila.get("salary", "") or ""))
     return Vacante(
@@ -21,7 +30,7 @@ def _a_vacante(fila: dict) -> Vacante:
         titulo=str(fila.get("title", "")),
         empresa=str(fila.get("company", "")),
         ubicacion=normalizar_ubicacion(str(fila.get("location", ""))),
-        modalidad=Modalidad.REMOTO if fila.get("is_remote") else Modalidad.DESCONOCIDO,
+        modalidad=Modalidad.REMOTO if _sin_nan(fila.get("is_remote")) else Modalidad.DESCONOCIDO,
         salario_min=int(smin) if smin is not None else None,
         salario_max=int(smax) if smax is not None else None,
         url=str(fila.get("job_url", "")),
@@ -45,5 +54,21 @@ def buscar(criterios: Criterios, scrape=None) -> ResultadoConector:
     except Exception as e:  # fail-loud (D4): JobSpy is not under our control
         return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
 
-    vacantes = [_a_vacante(f) for f in filas if _id_nativo(f)]
+    vacantes = []
+    omitidas = 0
+    for f in filas:
+        if not _id_nativo(f):
+            omitidas += 1
+            continue
+        try:
+            vacantes.append(_a_vacante(f))
+        except Exception:
+            omitidas += 1
+
+    if omitidas:
+        return ResultadoConector(
+            estado=EstadoConector.OK,
+            vacantes=vacantes,
+            detalle=f"{omitidas} filas omitidas por datos inválidos",
+        )
     return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes)

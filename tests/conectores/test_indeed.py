@@ -36,3 +36,27 @@ def test_excepcion_de_jobspy_es_error_fail_loud():
         raise RuntimeError("bloqueado")
     r = buscar(Criterios(terminos="x"), scrape=explota)
     assert r.estado == EstadoConector.ERROR and "bloqueado" in r.detalle
+
+
+def test_filas_con_nan_no_crashea_y_normaliza():
+    nan = float("nan")
+    filas = [{
+        "id": "ok1", "title": "Dev", "company": "ACME", "location": "Bogotá",
+        "job_url": "https://indeed/ok1",
+        "is_remote": nan, "min_amount": nan, "max_amount": nan, "description": nan,
+    }]
+    r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF(filas))
+    assert r.estado == EstadoConector.OK and len(r.vacantes) == 1
+    v = r.vacantes[0]
+    assert v.salario_min is None and v.salario_max is None
+    assert v.modalidad.value == "desconocido"     # NaN is_remote must NOT become remoto
+
+
+def test_id_nan_cae_a_job_url():
+    nan = float("nan")
+    filas = [{
+        "id": nan, "title": "Dev", "company": "ACME", "location": "Bogotá",
+        "job_url": "https://indeed/xyz", "is_remote": False,
+    }]
+    r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF(filas))
+    assert r.vacantes[0].id_nativo == "https://indeed/xyz"   # not "nan"
