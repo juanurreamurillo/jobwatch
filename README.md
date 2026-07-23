@@ -42,6 +42,40 @@ Cada conector implementa el mismo contrato — `buscar(criterios) -> ResultadoCo
 
 Python · [`curl_cffi`](https://github.com/lexiforest/curl_cffi) · [`extruct`](https://github.com/scrapinghub/extruct) · [`pydantic`](https://github.com/pydantic/pydantic) · [`python-jobspy`](https://github.com/speedyapply/JobSpy)
 
+## Uso local
+
+Instala el proyecto y sus dependencias en un entorno virtual, y provee tu CV como texto plano en `data/cv.txt` (esta carpeta está en `.gitignore` — nunca se sube):
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e .
+mkdir -p data && cp /ruta/a/tu-cv.txt data/cv.txt
+```
+
+Corre una búsqueda (necesita `ANTHROPIC_API_KEY` para la puntuación):
+
+```bash
+ANTHROPIC_API_KEY=… .venv/bin/jobwatch run \
+  --terminos "Gerente de Proyectos TI" --ubicacion "Colombia" --cv data/cv.txt
+```
+
+El reporte de vacantes nuevas queda en `reportes/AAAA-MM-DD.md`. Para redactar una carta de una oferta guardada, bajo demanda:
+
+```bash
+ANTHROPIC_API_KEY=… .venv/bin/jobwatch carta <id_estable>
+```
+
+## Programación
+
+Para que corra solo cada día (por ejemplo, 8am), agrega una entrada a `crontab -e`. En WSL2 asegúrate de que el servicio cron esté activo (`sudo service cron start`):
+
+```cron
+0 8 * * * cd /ruta/a/jobwatch && ANTHROPIC_API_KEY=… .venv/bin/jobwatch run \
+  --terminos "Gerente de Proyectos TI" --ubicacion "Colombia" --cv data/cv.txt
+```
+
+Cada corrida reporta solo las vacantes **nuevas** desde la anterior. En Windows, el Programador de Tareas puede invocar el mismo comando dentro de WSL.
+
 ## Uso responsable
 
 `jobwatch` está pensado para uso **personal y de bajo volumen** sobre listados de empleo **públicos**:
