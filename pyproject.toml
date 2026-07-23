@@ -1,0 +1,55 @@
+[project]
+name = "jobwatch"
+version = "0.0.1"
+description = "A console-first job aggregator: search many boards, dedup, score against your CV, report only what's new."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Juan Urrea" },
+    { name = "Claude (Anthropic)" },
+]
+keywords = ["jobs", "aggregator", "scraping", "cli", "job-search"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business",
+]
+
+dependencies = [
+    "curl_cffi>=0.7",
+    "extruct>=0.16",
+    "pydantic>=2.0",
+    "python-jobspy>=1.1",
+]
+
+[project.optional-dependencies]
+# Phase 0 endpoint-discovery tooling (dev only).
+discovery = [
+    "mitmproxy2swagger>=0.11",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+jobwatch = "jobwatch.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/juanurreamurillo/jobwatch"
+Repository = "https://github.com/juanurreamurillo/jobwatch"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

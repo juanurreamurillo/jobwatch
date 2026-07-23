@@ -1,0 +1,52 @@
+# --- Secrets & personal data — NEVER commit -------------------------------
+secrets/
+*.env
+.env
+.env.*
+
+# User-provided input (CV, resume, cover-letter bases)
+data/
+cv/
+*.cv.txt
+resume.*
+cover-letter*
+
+# Runtime output (may contain personal job matches)
+reportes/
+reports/
+*.db
+*.sqlite
+*.sqlite3
+
+# Discovered endpoint captures (may contain session tokens / cookies)
+*.har
+*.flow
+captures/
+docs/endpoints.local.md
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+
+# --- Tooling / IDE --------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.log
+
+# --- OS -------------------------------------------------------------------
+.DS_Store
+Thumbs.db
