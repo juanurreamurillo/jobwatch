@@ -2,7 +2,7 @@
 
 **Un agregador de empleos para la consola.** Corre una búsqueda en varios portales a la vez, deduplica los resultados, los puntúa contra tu propio CV y te entrega un reporte de solo lo que es *nuevo* desde la última corrida — sin abrir cinco pestañas.
 
-> Estado: **fase de diseño.** La arquitectura está especificada en [`docs/design.md`](docs/design.md); los conectores se construyen tras una fase de descubrimiento (ver abajo). Se aceptan contribuciones.
+> Estado: **0.1.0 Beta en producción.** MVP + Plan A (multi-portal engine) + Plan B (CLI + skill de Claude Code) completados. Hoja de ruta de próximas fases en [`docs/design.md`](docs/design.md). Se aceptan contribuciones.
 
 ---
 
