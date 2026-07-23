@@ -22,10 +22,12 @@ deduplicación.
 
 | Portal | Tipo | Mecanismo | Sesión |
 |---|---|---|---|
-| Computrabajo | SSR tras Cloudflare | `curl_cffi` (TLS de grado navegador) + `extruct` sobre JSON-LD `JobPosting` | No (público) |
-| elempleo | SPA, API JSON interna | `curl_cffi` contra endpoint interno (mapeado en Fase 0) | No (público) |
-| Magneto | SPA, API JSON interna | `curl_cffi` contra endpoint interno (mapeado en Fase 0) | No (público) |
+| Computrabajo | SSR tras Cloudflare | `curl_cffi` (TLS de grado navegador) + parsing del HTML (con `extruct` si hay JSON-LD) | No (público) |
+| elempleo | SSR, HTML | `curl_cffi` + parsing del HTML (ver `docs/endpoints.md`) | No (público) |
+| Magneto | SSR, HTML | `curl_cffi` + parsing del HTML (ver `docs/endpoints.md`) | No (público) |
 | Indeed | Librería de terceros | Envuelve `JobSpy`; categoría aparte (ver §5d, D4) | No (público) |
+
+> **Corrección de la Fase 0 (2026-07-23):** el reconocimiento inicial mostró que **elempleo y Magneto son SSR** (los listados vienen en el HTML del servidor), no SPAs con API JSON interna como se supuso en el diseño original. Sus conectores parsean HTML, sin ingeniería inversa de XHR. Computrabajo confirmó que bloquea a clientes sin fingerprint de navegador (justifica `curl_cffi`). Detalle en `docs/endpoints.md`.
 
 LinkedIn queda **fuera de alcance** en el MVP: sesión obligatoria y detección de
 automatización agresiva hacen que el riesgo de bloqueo de cuenta sea
