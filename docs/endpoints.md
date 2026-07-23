@@ -5,64 +5,75 @@ URL, el tipo de página (SSR vs SPA vs API), la forma de la respuesta y las
 señales necesarias para construir cada conector. Es el insumo del plan de
 conectores colombianos.
 
-**Estado:** reconocimiento inicial hecho de forma remota (fetch + búsqueda). La
-captura fina (selectores exactos, id nativo, paginación) se completa corriendo
-`discovery/probe.py` **localmente**, porque solo desde tu máquina se alcanzan
-los portales con TLS de grado navegador y, si hiciera falta, tu sesión.
+**Estado:** sondeo ejecutado con `discovery/probe.py` (curl_cffi `chrome124`) el
+2026-07-23 con el término "gerente de proyectos". Los tres portales
+respondieron **HTTP 200 sin bloqueo** — incluido Computrabajo, que con TLS de
+grado navegador **pasa Cloudflare**. Los datos de abajo son reales. Falta
+únicamente fijar los selectores exactos de empresa/salario/ubicación, que se
+harán al escribir cada conector con TDD contra el HTML capturado.
 
 ---
 
 ## Resumen
 
-| Portal | URL de búsqueda (patrón) | Tipo | JSON-LD | Mecanismo del conector |
-|---|---|---|---|---|
-| Computrabajo | `https://co.computrabajo.com/trabajo-de-{slug}` | SSR tras **Cloudflare** | Por confirmar (local) | `curl_cffi` + parsing HTML |
-| elempleo | `https://www.elempleo.com/co/ofertas-empleo/trabajo-{slug}` | **SSR** | No detectado | `curl_cffi` + parsing HTML |
-| Magneto | `https://www.magneto365.com/co/trabajos/buscar` (param por confirmar) | **SSR** | No detectado | `curl_cffi` + parsing HTML |
+| Portal | URL de búsqueda | HTTP | Cloudflare | Fuente del listado | Id nativo |
+|---|---|---|---|---|---|
+| Computrabajo | `https://co.computrabajo.com/trabajo-de-{slug}` | 200 | pasa con curl_cffi | DOM: `article.box_offer` | `data-id` (hash hex) |
+| elempleo | `https://www.elempleo.com/co/ofertas-empleo/trabajo-{slug}` | 200 | n/a | JSON-LD `ItemList` + DOM | dígitos finales de la URL / `data-id` |
+| Magneto | `https://www.magneto365.com/co/trabajos/buscar?search={q}` | 200 | n/a | JSON-LD `ItemList` + DOM | dígitos finales de `/co/empleos/…-{id}` |
 
-`{slug}` = término de búsqueda en minúsculas con guiones (p. ej. "gerente de
-proyectos" → `gerente-de-proyectos`).
+`{slug}` = término en minúsculas con guiones ("gerente de proyectos" →
+`gerente-de-proyectos`). Ninguno expone `JobPosting` JSON-LD en la página de
+resultados (suele estar solo en el detalle), así que los tres parsean el DOM;
+elempleo y Magneto además traen un `ItemList` con título + URL de detalle.
 
 ---
 
 ## Computrabajo
 
-- **Observado (remoto):** una petición sin fingerprint de navegador (WebFetch)
-  devolvió **contenido vacío** — consistente con un challenge/403 de Cloudflare.
-  Esto **confirma** la premisa del diseño: hace falta `curl_cffi` con
-  `impersonate` de un Chrome reciente para pasar el check pasivo de TLS.
-- **Pendiente (local):** confirmar que `curl_cffi` devuelve 200 con el HTML de
-  resultados; verificar si el HTML incrusta `<script type="application/ld+json">`
-  con `@type: JobPosting` (si sí, `extruct` lo extrae casi todo: título,
-  empresa, salario, ubicación, fecha); identificar el **id nativo** de cada
-  oferta (en la URL del detalle o en un atributo `data-*`); mapear la paginación.
-- **Riesgo:** si aparece un challenge JS (Turnstile) que `curl_cffi` no resuelve,
-  este conector se promueve a conector-navegador (nodriver/Camoufox) — decisión
-  explícita D5, no un fallback oculto.
+- **Confirmado:** `curl_cffi` con `impersonate="chrome124"` devuelve **200** (313 KB),
+  sin challenge de Cloudflare. La premisa del diseño se sostiene: sin fingerprint
+  de navegador el mismo request queda vacío (WebFetch lo comprobó).
+- **Listado:** cada oferta es un `<article class="box_offer" id="{HASH}" data-id="{HASH}">`.
+  - **id nativo** = atributo `data-id` (hash hex de 32, p. ej. `067CFDC9FD215E0B61373E686DCF3405`).
+    Estable y presente también al final de la URL de detalle.
+  - **título** = `article > h2 > a.js-o-link` (texto); **url** = su `href`
+    (`/ofertas-de-trabajo/oferta-de-trabajo-de-…-{HASH}`).
+  - empresa / ubicación / salario: en los `<p>`/`<span>` siguientes dentro del
+    `article` (selectores exactos a fijar en el conector con el HTML capturado).
+- **JSON-LD:** un único bloque con `@graph` (Organization + WebPage + ItemList de
+  14 ListItem); no aporta más que las URLs — el DOM es la fuente primaria.
+- **Riesgo D5:** si en el futuro aparece Turnstile, este conector se promueve a
+  conector-navegador (nodriver/Camoufox) — decisión explícita, no fallback oculto.
 
 ## elempleo
 
-- **Observado (remoto):** **SSR**. El HTML del servidor ya trae los listados
-  (título + empresa visibles; ~18 tarjetas en la primera página). **No** se
-  detectó bloque JSON-LD. La URL `…/trabajo-{slug}` responde directo.
-- **Implicación de diseño:** el conector parsea el HTML (no hay API JSON interna
-  que reversar, al contrario de lo que suponía el diseño original). El id nativo
-  probablemente vive en la URL del detalle (p. ej. `…/ofertas-trabajo/{slug}/{id}`).
-- **Pendiente (local):** fijar los selectores CSS del contenedor de oferta y de
-  cada campo; extraer el id nativo de la URL de detalle; confirmar paginación.
+- **Confirmado:** **SSR**, 200 (684 KB). La URL `…/trabajo-{slug}` responde directo.
+- **Listado (doble fuente):**
+  - **JSON-LD `ItemList`** (20 items): cada `ListItem.item` trae `@id` = URL de
+    detalle y `name` = título. Ej: `@id` =
+    `https://www.elempleo.com/co/ofertas-trabajo/gerente-de-proyectos-1886730317`,
+    `name` = "Gerente de proyectos".
+  - **DOM**: tarjetas con `data-id="1886730317"` (mismo id).
+  - **id nativo** = dígitos finales de la URL de detalle (= `data-id`).
+- **Estrategia de conector:** iterar el `ItemList` para título + url + id; parsear
+  el card correspondiente en el DOM para empresa / salario / ubicación.
 
 ## Magneto
 
-- **Observado (remoto):** **SSR**. `…/co/trabajos/buscar` trae los listados en el
-  HTML (título, empresa, salario, ubicación; ~20 tarjetas). **No** se detectó
-  JSON-LD.
-- **Pendiente (local):** confirmar el **parámetro de búsqueda por término** (la
-  página `/buscar` sin parámetro ya lista; falta el `?...=` o la ruta que filtra
-  por palabra clave); fijar selectores; extraer id nativo; paginación.
+- **Confirmado:** **SSR**, 200 (891 KB). El parámetro `?search={q}` responde 200
+  (confirmar que efectivamente filtra por término al escribir el conector).
+- **Listado (doble fuente):**
+  - **JSON-LD `ItemList`** (20 items): cada `ListItem.url` = URL de detalle. Ej:
+    `https://www.magneto365.com/co/empleos/gestor-de-servicio-en-sitio-1004184`.
+  - **id nativo** = dígitos finales de esa URL (`1004184`). El detalle vive en
+    `/co/empleos/{slug}-{id}` (no `/co/trabajos/…`).
+  - título / empresa / salario / ubicación: del card en el DOM (o del slug para el
+    título) — selectores a fijar en el conector.
 
 ---
 
-## Cómo completar la captura (runbook local)
+## Cómo re-capturar (runbook local)
 
 1. Instala el proyecto con sus dependencias: `pip install -e .` (trae `curl_cffi`
    y `extruct`).
