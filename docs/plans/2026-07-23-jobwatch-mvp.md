@@ -1300,3 +1300,20 @@ git commit -m "docs: scheduling recipe for WSL2 cron"
 - **Spec coverage:** models (§3.2) → T1; normalization (D7, §7) → T2; store + two-level dedup (§6, §8) → T3; local filter (§7) → T4; LLM cap + fail-loud (§7, D6) → T5; Indeed/JobSpy fail-loud adapter (D4, §2) → T6; report + per-connector status (§8, D2) → T7; pipeline + CLI (§3) → T8; lazy letters (D6) → T9; scheduler (§8) → T10. Colombian connectors + session (§2, D1, D5) explicitly deferred with rationale.
 - **Type consistency:** `buscar(criterios) -> ResultadoConector`, `EstadoConector`, `EstadoOferta`, `OfertaPuntuada`, `filtro_local`, `puntuar`, `correr` names are consistent across T1–T9.
 - **Fakes everywhere:** no test touches the network or a real LLM (`puntuador`, `scrape`, `generar` all injected).
+
+---
+
+## Correcciones aplicadas durante la implementación
+
+El plan se ejecutó con TDD (un subagente por tarea + revisión). Los siguientes ajustes se hicieron sobre el código de referencia de arriba para que los tests pasaran o para endurecer contra datos reales. El código en `src/` es la fuente de verdad; esta lista documenta los deltas.
+
+- **Tarea 1 — fingerprint / normalización D.C.** El `_clave()` de referencia y su test eran inconsistentes con "D.C.". La normalización del sufijo "D.C." se acotó a la ubicación (`_clave_ubicacion`) y se hizo insensible a mayúsculas, para no mutilar nombres de empresa/título que contengan "D.C.".
+- **Tarea 2 — regex de ubicación.** Se reposicionó el word-boundary (`\bd\.?\s*c\b\.?`) para no comerse ciudades reales que empiezan por C precedidas de una "D" suelta (p. ej. "D Cali").
+- **Tarea 6 — conector Indeed / pandas NaN.** JobSpy real devuelve un DataFrame donde las celdas faltantes son `NaN` (float), no `None`. Se añadió coerción `_sin_nan` y mapeo por-fila con `try/except`, para no crashear (`int(nan)`), no etiquetar mal `is_remote`, ni corromper `id_nativo`. Las filas inválidas se cuentan en `detalle`.
+- **Tarea 8 — fixture de test.** Los datos de prueba colisionaban bajo la dedup secundaria (mismo fingerprint); se les dio un título distinto para probar la intención real ("solo se puntúa la nueva").
+- **Tarea 9 — extracción del LLM.** `content[0].text` falla cuando el modelo emite un bloque de *thinking* primero; se extrae el primer bloque de tipo `text`. El parseo de JSON se hizo tolerante a fences/prosa. El comando `carta` recibe `--cv` y falla explícito si el CV está vacío, en vez de generar con un CV en blanco.
+
+### Pendientes conocidos (para el plan de conectores post-Fase 0)
+
+- **Dedup dentro de la misma corrida.** `correr()` deduplica solo contra el estado del store de corridas previas, no dentro del lote actual. Con varios conectores, la misma oferta vista en dos portales en la misma corrida se persistiría dos veces. Es inocuo mientras Indeed sea el único conector; debe añadirse dedup por `fingerprint_contenido` dentro del lote cuando lleguen los conectores colombianos (promesa §6 del diseño, "vista en N portales").
+- **Propagación de `detalle` al reporte.** Hoy el reporte muestra `ERROR` por conector pero no el motivo (`detalle`). Enriquecer el render para mostrar "bloqueado" vs "rate-limited" fortalecería la señal fail-loud (D2).
