@@ -50,6 +50,7 @@ Fixtures (ya existentes, NO recrear): `tests/conectores/fixtures/computrabajo.ht
   - `id_de_url(url: str) -> str` — dígitos finales de una URL (`".../algo-1004184" -> "1004184"`); `""` si no hay.
   - `texto(node) -> str` — `get_text()` colapsado a espacios simples y `strip()`; `""` si `node` es `None`.
   - `coincide_termino(titulo: str, terminos: str) -> bool` — `True` si todos los tokens significativos (len≥3, sin stopwords) del término aparecen como palabra en el título normalizado; `True` si no hay tokens significativos.
+  - `ejecutar(criterios: Criterios, url_fn, fetch, extraer) -> ResultadoConector` — **envoltorio fail-loud compartido** por los tres conectores: aplica `fetch or fetch_curl`, hace `try/except` sobre `fetch(url_fn(criterios))` devolviendo `ERROR` con `detalle=str(e)`, y en éxito llama `extraer(html, criterios) -> tuple[list[Vacante], int]` (vacantes, omitidas) y ensambla `OK` con `detalle="N filas omitidas por datos inválidos"` si hubo omitidas. Centraliza el único camino fail-loud (D2) en un solo lugar.
 
 - [ ] **Step 1: Añadir `beautifulsoup4` a `pyproject.toml`.** En `[project].dependencies`, añadir la línea (mantener orden alfabético relativo):
 
@@ -70,8 +71,9 @@ Crear `tests/conectores/test_comun.py`:
 from bs4 import BeautifulSoup
 
 from jobwatch.conectores._comun import (
-    coincide_termino, id_de_url, slug, texto,
+    coincide_termino, ejecutar, id_de_url, slug, texto,
 )
+from jobwatch.modelos import Criterios, EstadoConector, Vacante
 
 
 def test_slug():
@@ -95,6 +97,25 @@ def test_coincide_termino():
     assert coincide_termino("Gestor de servicio en sitio", "gerente de proyectos") is False
     # acentos y mayúsculas no importan; 'de' es stopword y se ignora
     assert coincide_termino("GESTIÓN de Proyéctos TI", "proyectos") is True
+
+
+def test_ejecutar_envuelve_exito_y_detalle():
+    def extraer(html, c):
+        v = Vacante(id_nativo="1", portal="x", titulo="T", empresa="E",
+                    ubicacion="Bogotá", url="https://x/1")
+        return [v], 2
+    r = ejecutar(Criterios(terminos="t"), lambda c: "https://x",
+                 fetch=lambda u: "<html></html>", extraer=extraer)
+    assert r.estado is EstadoConector.OK and len(r.vacantes) == 1
+    assert "2 filas omitidas" in r.detalle
+
+
+def test_ejecutar_fetch_falla_es_error():
+    def boom(u):
+        raise RuntimeError("403 bloqueado")
+    r = ejecutar(Criterios(terminos="t"), lambda c: "u",
+                 fetch=boom, extraer=lambda h, c: ([], 0))
+    assert r.estado is EstadoConector.ERROR and "403 bloqueado" in r.detalle
 ```
 
 - [ ] **Step 4: Correr el test y verlo fallar.**
@@ -111,7 +132,7 @@ from __future__ import annotations
 
 import re
 
-from jobwatch.modelos import _clave
+from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, _clave
 
 IMPERSONATE = "chrome124"  # perfil de navegador reciente para curl_cffi
 
@@ -148,12 +169,25 @@ def coincide_termino(titulo: str, terminos: str) -> bool:
     if not toks:
         return True
     return all(re.search(rf"\b{re.escape(w)}\b", t) for w in toks)
+
+
+def ejecutar(criterios: Criterios, url_fn, fetch, extraer) -> ResultadoConector:
+    """Envoltorio fail-loud compartido (D2): fetch → try/except → ERROR, o
+    extraer(html, criterios) -> (vacantes, omitidas) → OK con detalle."""
+    fetch = fetch or fetch_curl
+    try:
+        html = fetch(url_fn(criterios))
+    except Exception as e:  # fail-loud
+        return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
+    vacantes, omitidas = extraer(html, criterios)
+    detalle = f"{omitidas} filas omitidas por datos inválidos" if omitidas else ""
+    return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes, detalle=detalle)
 ```
 
 - [ ] **Step 6: Correr el test y verlo pasar.**
 
 Run: `.venv/bin/pytest tests/conectores/test_comun.py -q`
-Expected: PASS (4 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 7: Lint + commit.**
 
@@ -246,8 +280,8 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from jobwatch.conectores._comun import fetch_curl, slug, texto
-from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
+from jobwatch.conectores._comun import ejecutar, slug, texto
+from jobwatch.modelos import Criterios, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 HOST = "https://co.computrabajo.com"
@@ -279,13 +313,7 @@ def _a_vacante(art) -> Vacante:
     )
 
 
-def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    fetch = fetch or fetch_curl
-    try:
-        html = fetch(_url(criterios))
-    except Exception as e:  # fail-loud (D2)
-        return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
-
+def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
     sopa = BeautifulSoup(html, "lxml")
     vacantes: list[Vacante] = []
     omitidas = 0
@@ -298,9 +326,11 @@ def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
             vacantes.append(v)
         except Exception:
             omitidas += 1
+    return vacantes, omitidas
 
-    detalle = f"{omitidas} filas omitidas por datos inválidos" if omitidas else ""
-    return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes, detalle=detalle)
+
+def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
+    return ejecutar(criterios, _url, fetch, _extraer)
 ```
 
 - [ ] **Step 4: Correr y ver pasar.**
@@ -381,8 +411,8 @@ import json
 
 from bs4 import BeautifulSoup
 
-from jobwatch.conectores._comun import fetch_curl, id_de_url, slug
-from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
+from jobwatch.conectores._comun import ejecutar, id_de_url, slug
+from jobwatch.modelos import Criterios, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 HOST = "https://www.elempleo.com"
@@ -421,13 +451,7 @@ def _cards_por_id(sopa) -> dict[str, dict]:
     return porid
 
 
-def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    fetch = fetch or fetch_curl
-    try:
-        html = fetch(_url(criterios))
-    except Exception as e:
-        return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
-
+def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
     sopa = BeautifulSoup(html, "lxml")
     cards = _cards_por_id(sopa)
     vacantes: list[Vacante] = []
@@ -453,9 +477,11 @@ def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
             ))
         except Exception:
             omitidas += 1
+    return vacantes, omitidas
 
-    detalle = f"{omitidas} filas omitidas por datos inválidos" if omitidas else ""
-    return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes, detalle=detalle)
+
+def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
+    return ejecutar(criterios, _url, fetch, _extraer)
 ```
 
 - [ ] **Step 4: Correr y ver pasar.**
@@ -541,9 +567,9 @@ from __future__ import annotations
 from bs4 import BeautifulSoup
 
 from jobwatch.conectores._comun import (
-    coincide_termino, fetch_curl, id_de_url, texto,
+    coincide_termino, ejecutar, id_de_url, texto,
 )
-from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
+from jobwatch.modelos import Criterios, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 HOST = "https://www.magneto365.com"
@@ -579,13 +605,7 @@ def _a_vacante(art) -> Vacante:
     )
 
 
-def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    fetch = fetch or fetch_curl
-    try:
-        html = fetch(_url(criterios))
-    except Exception as e:
-        return ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
-
+def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
     sopa = BeautifulSoup(html, "lxml")
     vacantes: list[Vacante] = []
     omitidas = 0
@@ -602,9 +622,11 @@ def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
             vacantes.append(v)
         except Exception:
             omitidas += 1
+    return vacantes, omitidas
 
-    detalle = f"{omitidas} filas omitidas por datos inválidos" if omitidas else ""
-    return ResultadoConector(estado=EstadoConector.OK, vacantes=vacantes, detalle=detalle)
+
+def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
+    return ejecutar(criterios, _url, fetch, _extraer)
 ```
 
 - [ ] **Step 4: Correr y ver pasar.**
