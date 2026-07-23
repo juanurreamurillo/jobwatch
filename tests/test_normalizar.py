@@ -15,6 +15,16 @@ def test_normalizar_ubicacion_canoniza_bogota():
     assert normalizar_ubicacion("Medellín") == "Medellín"
 
 
+def test_normalizar_ubicacion_no_devora_ciudades_con_c():
+    # una "D" suelta antes de una ciudad con C no debe mutilarla
+    assert normalizar_ubicacion("D Cali") != "ali"
+    assert "Cali" in normalizar_ubicacion("D Cali")
+
+
+def test_normalizar_ubicacion_dc_sin_punto_final():
+    assert normalizar_ubicacion("Bogotá D.C") == "Bogotá"
+
+
 def test_normalizar_modalidad_mapea_sinonimos():
     assert normalizar_modalidad("Trabajo remoto") == Modalidad.REMOTO
     assert normalizar_modalidad("Híbrido") == Modalidad.HIBRIDO

@@ -20,7 +20,7 @@ def normalizar_ubicacion(s: str) -> str:
     s = normalizar_texto(s)
     # take the first segment before a comma, drop "D.C." and similar suffixes
     primero = s.split(",")[0]
-    primero = re.sub(r"\bd\.?\s*c\.?\.?", "", primero, flags=re.IGNORECASE).strip()
+    primero = re.sub(r"\bd\.?\s*c\b\.?", "", primero, flags=re.IGNORECASE).strip()
     return _CIUDADES.get(primero.lower(), primero)
 
 
