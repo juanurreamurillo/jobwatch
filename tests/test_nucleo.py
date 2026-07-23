@@ -67,3 +67,73 @@ def test_cosechar_backstop_conector_que_lanza(tmp_path):
     assert "timeout de red" in cosecha.estados["malo"].detalle
     assert len(cosecha.candidatas) == 1
     store.cerrar()
+
+
+def _cosecha_de(vs, fecha="2026-07-23"):
+    from jobwatch.modelos import Cosecha
+    return Cosecha(run_id=calcular_run_id(vs, fecha), tope=50, estados={}, candidatas=vs)
+
+
+def test_validar_scores_ok_incluye_sin_puntaje():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import validar_scores
+
+    a, b = _v("1"), _v("2", titulo="Otro")
+    cosecha = _cosecha_de([a, b])
+    lote = LotePuntajes(run_id=cosecha.run_id, puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=78, razon="encaja"),
+        Puntaje(id_estable=b.id_estable, estado=EstadoOferta.SIN_PUNTAJE, puntaje=None, razon="no aplica"),
+    ])
+    ofertas = validar_scores(cosecha, lote)
+    por_id = {o.vacante.id_estable: o for o in ofertas}
+    assert por_id[a.id_estable].puntaje == 78
+    assert por_id[b.id_estable].estado is EstadoOferta.SIN_PUNTAJE
+
+
+def test_validar_scores_run_id_desalineado():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import ScoresInvalidos, validar_scores
+
+    a = _v("1")
+    cosecha = _cosecha_de([a])
+    lote = LotePuntajes(run_id="viejo000", puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=50)])
+    with pytest.raises(ScoresInvalidos, match="run_id"):
+        validar_scores(cosecha, lote)
+
+
+def test_validar_scores_falta_una_candidata():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import ScoresInvalidos, validar_scores
+
+    a, b = _v("1"), _v("2", titulo="Otro")
+    cosecha = _cosecha_de([a, b])
+    lote = LotePuntajes(run_id=cosecha.run_id, puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=50)])
+    with pytest.raises(ScoresInvalidos):
+        validar_scores(cosecha, lote)
+
+
+def test_validar_scores_id_inventado():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import ScoresInvalidos, validar_scores
+
+    a = _v("1")
+    cosecha = _cosecha_de([a])
+    lote = LotePuntajes(run_id=cosecha.run_id, puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=50),
+        Puntaje(id_estable="fantasma", estado=EstadoOferta.PUNTUADA, puntaje=50)])
+    with pytest.raises(ScoresInvalidos):
+        validar_scores(cosecha, lote)
+
+
+def test_validar_scores_puntaje_fuera_de_rango():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import ScoresInvalidos, validar_scores
+
+    a = _v("1")
+    cosecha = _cosecha_de([a])
+    lote = LotePuntajes(run_id=cosecha.run_id, puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=150)])
+    with pytest.raises(ScoresInvalidos, match="0.*100|rango"):
+        validar_scores(cosecha, lote)

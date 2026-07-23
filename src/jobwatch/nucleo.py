@@ -8,6 +8,9 @@ from jobwatch.modelos import (
     Cosecha,
     Criterios,
     EstadoConector,
+    EstadoOferta,
+    LotePuntajes,
+    OfertaPuntuada,
     PRIORIDAD_PORTAL,
     ResultadoConector,
     Vacante,
@@ -81,3 +84,39 @@ def cosechar(
         estados=estados,
         candidatas=nuevas,
     )
+
+
+class ScoresInvalidos(Exception):
+    pass
+
+
+def validar_scores(cosecha: Cosecha, lote: LotePuntajes) -> list[OfertaPuntuada]:
+    """Fail-loud (D14): exige run_id igual, cobertura TOTAL de id_estable (ni
+    faltantes ni inventadas) y puntaje ∈ 0–100 en las puntuadas. Aborta si no."""
+    if lote.run_id != cosecha.run_id:
+        raise ScoresInvalidos(
+            f"run_id desalineado: scores={lote.run_id!r} != candidatas={cosecha.run_id!r}"
+        )
+
+    ids_candidatas = {v.id_estable for v in cosecha.candidatas}
+    ids_scores = {p.id_estable for p in lote.puntajes}
+    if ids_scores != ids_candidatas:
+        faltan = ids_candidatas - ids_scores
+        sobran = ids_scores - ids_candidatas
+        raise ScoresInvalidos(f"cobertura incompleta: faltan={faltan} inventadas={sobran}")
+
+    por_id = {p.id_estable: p for p in lote.puntajes}
+    for p in lote.puntajes:
+        if p.estado is EstadoOferta.PUNTUADA:
+            if p.puntaje is None or not (0 <= p.puntaje <= 100):
+                raise ScoresInvalidos(
+                    f"puntaje fuera de rango 0–100 para {p.id_estable}: {p.puntaje}"
+                )
+
+    ofertas: list[OfertaPuntuada] = []
+    for v in cosecha.candidatas:
+        p = por_id[v.id_estable]
+        ofertas.append(OfertaPuntuada(
+            vacante=v, estado=p.estado, puntaje=p.puntaje, razon=p.razon,
+        ))
+    return ofertas
