@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "run":
-        from jobwatch.conectores import indeed
+        from jobwatch.conectores import computrabajo, elempleo, indeed, magneto
         from jobwatch.llm import puntuador_real
         from jobwatch.modelos import Criterios
         from jobwatch.orquestador import correr
@@ -33,7 +33,12 @@ def main(argv: list[str] | None = None) -> int:
         cv = Path(args.cv).read_text(encoding="utf-8")
         criterios = Criterios(terminos=args.terminos, ubicacion=args.ubicacion)
         store = Store(args.db)
-        conectores = {"indeed": indeed.buscar}
+        conectores = {
+            "computrabajo": computrabajo.buscar,
+            "elempleo": elempleo.buscar,
+            "magneto": magneto.buscar,
+            "indeed": indeed.buscar,
+        }
         fecha = _dt.date.today().isoformat()
         md, _ = correr(criterios, cv, store, puntuador_real, conectores, fecha)
         store.cerrar()

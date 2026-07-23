@@ -83,3 +83,25 @@ def test_desempate_deterministico_portales_no_listados():
     assert len(out_ab) == 1 and len(out_ba) == 1
     assert out_ab[0].portal == out_ba[0].portal
     assert out_ab[0].portales == out_ba[0].portales == ["glassdoor", "linkedin"]
+
+
+def test_correr_colapsa_entre_conectores(tmp_path):
+    from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
+    from jobwatch.orquestador import correr
+    from jobwatch.store import Store
+
+    def _mk(portal):
+        v = Vacante(id_nativo="1", portal=portal, titulo="Gerente de Proyectos",
+                    empresa="ACME", ubicacion="Bogotá", url=f"https://{portal}/1")
+        return lambda c: ResultadoConector(estado=EstadoConector.OK, vacantes=[v])
+
+    store = Store(str(tmp_path / "j.db"))
+    conectores = {"computrabajo": _mk("computrabajo"), "magneto": _mk("magneto")}
+    md, resultados = correr(
+        Criterios(terminos="gerente de proyectos"), "cv", store,
+        lambda v, cv: {"puntaje": 70, "razon": "ok"}, conectores, "2026-07-23",
+    )
+    store.cerrar()
+    # una sola oferta persistida (colapsada), y el reporte la marca multi-portal
+    assert md.count("### [Gerente de Proyectos]") == 1
+    assert "Vista en 2 portales: computrabajo, magneto" in md
