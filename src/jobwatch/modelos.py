@@ -106,3 +106,22 @@ class ResultadoConector(BaseModel):
     estado: EstadoConector
     vacantes: list[Vacante] = []
     detalle: str = ""
+
+
+class Puntaje(BaseModel):
+    id_estable: str
+    estado: EstadoOferta
+    puntaje: int | None = None
+    razon: str = ""
+
+
+class LotePuntajes(BaseModel):
+    run_id: str
+    puntajes: list[Puntaje] = []
+
+
+class Cosecha(BaseModel):
+    run_id: str
+    tope: int
+    estados: dict[str, ResultadoConector] = {}
+    candidatas: list[Vacante] = []

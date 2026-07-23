@@ -44,3 +44,31 @@ def test_fingerprint_dc_insensible_a_mayusculas_y_acotado_a_ubicacion():
     assert calcular_fingerprint("X", "Y", "Bogotá D.C.") == calcular_fingerprint("X", "Y", "bogota d.c.") == calcular_fingerprint("X", "Y", "Bogotá")
     # 'D.C.' inside a company name is NOT stripped (scope is location-only)
     assert calcular_fingerprint("D.C. United", "Y", "Bogotá") != calcular_fingerprint("United", "Y", "Bogotá")
+
+
+def test_cosecha_round_trip_json():
+    from jobwatch.modelos import Cosecha, EstadoConector, ResultadoConector, Vacante
+
+    v = Vacante(id_nativo="1", portal="computrabajo", titulo="Dev", empresa="ACME",
+                ubicacion="Bogotá", url="https://x/1")
+    c = Cosecha(
+        run_id="abcd1234", tope=50,
+        estados={"computrabajo": ResultadoConector(estado=EstadoConector.OK, detalle="")},
+        candidatas=[v],
+    )
+    reconstruida = Cosecha.model_validate_json(c.model_dump_json())
+    assert reconstruida.run_id == "abcd1234"
+    assert reconstruida.tope == 50
+    assert reconstruida.candidatas[0].id_estable == v.id_estable
+    assert reconstruida.estados["computrabajo"].estado is EstadoConector.OK
+
+
+def test_lote_puntajes_estado_enum():
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+
+    lote = LotePuntajes(run_id="x", puntajes=[
+        Puntaje(id_estable="a", estado=EstadoOferta.PUNTUADA, puntaje=80, razon="ok"),
+        Puntaje(id_estable="b", estado=EstadoOferta.SIN_PUNTAJE, puntaje=None, razon="no aplica"),
+    ])
+    assert lote.puntajes[0].puntaje == 80
+    assert lote.puntajes[1].puntaje is None

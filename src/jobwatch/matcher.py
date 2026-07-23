@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
-
-from jobwatch.modelos import Criterios, EstadoOferta, Modalidad, OfertaPuntuada, Vacante
+from jobwatch.modelos import Criterios, Modalidad, Vacante
 
 
 def filtro_local(v: Vacante, c: Criterios) -> bool:
@@ -16,38 +14,3 @@ def filtro_local(v: Vacante, c: Criterios) -> bool:
         if v.modalidad is not c.modalidad:
             return False
     return True
-
-
-PuntuadorLLM = Callable[[Vacante, str], dict]
-
-
-class TopeExcedido(Exception):
-    pass
-
-
-def puntuar(
-    vacantes: list[Vacante],
-    cv: str,
-    puntuador: PuntuadorLLM,
-    tope: int = 50,
-) -> list[OfertaPuntuada]:
-    if len(vacantes) > tope:
-        raise TopeExcedido(
-            f"{len(vacantes)} ofertas superan el tope de {tope}; "
-            f"revisa el filtro local antes de gastar en el LLM."
-        )
-    resultado: list[OfertaPuntuada] = []
-    for v in vacantes:
-        try:
-            r = puntuador(v, cv)
-            resultado.append(
-                OfertaPuntuada(
-                    vacante=v, estado=EstadoOferta.PUNTUADA,
-                    puntaje=int(r["puntaje"]), razon=str(r.get("razon", "")),
-                )
-            )
-        except Exception as e:  # fail-loud per offer, no aborta el lote
-            resultado.append(
-                OfertaPuntuada(vacante=v, estado=EstadoOferta.ERROR, razon=str(e))
-            )
-    return resultado
