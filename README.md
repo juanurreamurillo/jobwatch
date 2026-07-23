@@ -1,61 +1,61 @@
 # jobwatch
 
-**A console-first job aggregator.** Run one search across several job boards, deduplicate the results, score them against your own CV, and get a report of only what's *new* since the last run — without opening five tabs.
+**Un agregador de empleos para la consola.** Corre una búsqueda en varios portales a la vez, deduplica los resultados, los puntúa contra tu propio CV y te entrega un reporte de solo lo que es *nuevo* desde la última corrida — sin abrir cinco pestañas.
 
-> Status: **design phase.** The architecture is specified in [`docs/design.md`](docs/design.md); connectors are built after a discovery phase (see below). Contributions welcome.
+> Estado: **fase de diseño.** La arquitectura está especificada en [`docs/design.md`](docs/design.md); los conectores se construyen tras una fase de descubrimiento (ver abajo). Se aceptan contribuciones.
 
 ---
 
-## Why
+## Por qué
 
-Job boards each have their own UI, their own search, and their own noise. `jobwatch` treats them as data sources behind a single contract, so you review one consolidated, ranked list on your terms — in the terminal or from a scheduled run.
+Cada portal de empleo tiene su propia interfaz, su propia búsqueda y su propio ruido. `jobwatch` los trata como fuentes de datos detrás de un único contrato, para que revises una sola lista consolidada y ordenada a tu manera — en la terminal o desde una corrida programada.
 
-It reads only what a normal public search already shows you, at a low, personal volume, with delays between requests. See [Responsible use](#responsible-use).
+Lee únicamente lo que una búsqueda pública ya te muestra, a volumen personal y bajo, con pausas entre peticiones. Ver [Uso responsable](#uso-responsable).
 
-## How it works
+## Cómo funciona
 
 ```
-[Connectors]              [Hybrid matcher]         [Store + Report]
- one per board     ──►     cheap local filter  ──►   SQLite + Markdown
- each emits                then LLM scoring          two-level dedup
- normalized Vacante        of survivors              new-only report
+[Conectores]              [Matcher híbrido]        [Store + Reporte]
+ uno por portal    ──►     filtro local barato ──►   SQLite + Markdown
+ cada uno emite            luego puntuación LLM       dedup de dos niveles
+ Vacante normalizada       de las sobrevivientes      reporte de solo nuevas
 ```
 
-Every connector implements the same contract — `buscar(criterios) -> ResultadoConector` — so adding a board is a new file, not a rewrite. Full design and the trade-offs behind each decision are in [`docs/design.md`](docs/design.md).
+Cada conector implementa el mismo contrato — `buscar(criterios) -> ResultadoConector` — así que agregar un portal es un archivo nuevo, no una reescritura. El diseño completo y las decisiones detrás de cada elección están en [`docs/design.md`](docs/design.md).
 
-### Design highlights
+### Puntos clave del diseño
 
-- **Single connector contract.** Boards are interchangeable behind one Pydantic `Vacante` model. Normalization (salary strings, city names, work mode) lives inside each connector.
-- **Fail-loud.** A connector that returns zero results distinguishes *"empty search"* from *"broken / blocked"*, so a silently failing source never masquerades as "nothing new".
-- **Two-level dedup.** Exact match on the board's native id, plus a content fingerprint that collapses the same posting seen across multiple boards or re-posted with a new id.
-- **Hybrid matching.** A free, deterministic local filter discards ~80% of noise; only the survivors are scored by an LLM against your CV. Cover letters are drafted lazily, on demand — not for every listing.
+- **Contrato único de conector.** Los portales son intercambiables detrás de un modelo Pydantic `Vacante`. La normalización (textos de salario, nombres de ciudad, modalidad) vive dentro de cada conector.
+- **Fail-loud.** Un conector que devuelve cero resultados distingue *"búsqueda vacía"* de *"roto / bloqueado"*, para que una fuente que falla en silencio nunca se haga pasar por "no hay nada nuevo".
+- **Dedup de dos niveles.** Coincidencia exacta por el id nativo del portal, más un fingerprint de contenido que colapsa la misma oferta vista en varios portales o re-publicada con id nuevo.
+- **Match híbrido.** Un filtro local, gratis y determinista, descarta ~80% del ruido; solo las sobrevivientes las puntúa un LLM contra tu CV. Las cartas de presentación se redactan de forma perezosa, bajo demanda — no para cada oferta.
 
-## Roadmap
+## Hoja de ruta
 
-- [ ] **Phase 0 — endpoint discovery.** Map each board's real endpoints and response shape into `docs/endpoints.md` (a deliverable on its own). Toolkit: browser DevTools (HAR export), [`mitmproxy2swagger`](https://github.com/alufers/mitmproxy2swagger), [`jsluice`](https://github.com/BishopFox/jsluice), [`curlconverter`](https://github.com/curlconverter/curlconverter).
-- [ ] Connectors: Computrabajo, elempleo, Magneto, Indeed (via [JobSpy](https://github.com/speedyapply/JobSpy)).
-- [ ] Hybrid matcher + SQLite store + Markdown report.
-- [ ] Scheduling recipe (cron / Task Scheduler).
-- [ ] Optional session support for boards that require it (designed, built only when needed).
+- [ ] **Fase 0 — descubrimiento de endpoints.** Mapear los endpoints reales y la forma de respuesta de cada portal en `docs/endpoints.md` (un entregable en sí mismo). Herramientas: DevTools del navegador (exportar HAR), [`mitmproxy2swagger`](https://github.com/alufers/mitmproxy2swagger), [`jsluice`](https://github.com/BishopFox/jsluice), [`curlconverter`](https://github.com/curlconverter/curlconverter).
+- [ ] Conectores: Computrabajo, elempleo, Magneto, Indeed (vía [JobSpy](https://github.com/speedyapply/JobSpy)).
+- [ ] Matcher híbrido + store SQLite + reporte Markdown.
+- [ ] Receta de programación (cron / Programador de Tareas).
+- [ ] Soporte opcional de sesión para portales que lo requieran (diseñado, construido solo cuando haga falta).
 
-## Tech
+## Tecnología
 
 Python · [`curl_cffi`](https://github.com/lexiforest/curl_cffi) · [`extruct`](https://github.com/scrapinghub/extruct) · [`pydantic`](https://github.com/pydantic/pydantic) · [`python-jobspy`](https://github.com/speedyapply/JobSpy)
 
-## Responsible use
+## Uso responsable
 
-`jobwatch` is built for **personal, low-volume** use over **public** job listings:
+`jobwatch` está pensado para uso **personal y de bajo volumen** sobre listados de empleo **públicos**:
 
-- It reads only what a public search already returns — no logging in required for the core flow.
-- It uses conservative delays between requests and avoids aggressive parallelism.
-- Automated access may be restricted by a site's Terms of Service. You are responsible for how you use this tool. Respect each site's terms, `robots.txt`, and rate limits.
+- Lee únicamente lo que una búsqueda pública ya devuelve — no requiere iniciar sesión para el flujo principal.
+- Usa pausas conservadoras entre peticiones y evita el paralelismo agresivo.
+- El acceso automatizado puede estar restringido por los Términos de Servicio de un sitio. Eres responsable del uso que le des a esta herramienta. Respeta los términos de cada sitio, su `robots.txt` y sus límites de tasa.
 
-`curl_cffi` is used for browser-grade TLS/HTTP compatibility with sites that reject non-browser clients — not to defeat access controls or authentication.
+`curl_cffi` se usa por compatibilidad TLS/HTTP de grado navegador con sitios que rechazan clientes no-navegador — no para vulnerar controles de acceso ni autenticación.
 
-## Contributing
+## Contribuir
 
-Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). A great first contribution is a new connector for a board in your region.
+Las contribuciones son bienvenidas — ver [`CONTRIBUTING.md`](CONTRIBUTING.md). Una excelente primera contribución es un conector nuevo para un portal de tu región.
 
-## License
+## Licencia
 
 [MIT](LICENSE) © 2026 Juan Urrea & Claude (Anthropic)
