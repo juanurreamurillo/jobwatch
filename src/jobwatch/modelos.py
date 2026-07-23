@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 from enum import Enum
 
@@ -31,9 +32,16 @@ def _clave(texto: str) -> str:
     sin_acentos = "".join(
         c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c)
     )
-    # Remove geographic modifier D.C. (Distrito Capital)
-    sin_acentos = sin_acentos.replace(" D.C.", "").replace("D.C.", "").replace(" D.C", "").replace("D.C", "")
-    return "".join(c for c in sin_acentos.lower() if c.isalnum() or c == " ").strip()
+    sin_simbolos = "".join(c for c in sin_acentos.lower() if c.isalnum() or c == " ")
+    return re.sub(r"\s+", " ", sin_simbolos).strip()
+
+
+def _clave_ubicacion(texto: str) -> str:
+    """Location-scoped comparison key: _clave() plus removal of a standalone
+    'dc' token, the residue of the geographic modifier D.C. (Distrito Capital)."""
+    clave = _clave(texto)
+    sin_dc = re.sub(r"\bdc\b", "", clave)
+    return re.sub(r"\s+", " ", sin_dc).strip()
 
 
 def calcular_id_estable(portal: str, id_nativo: str) -> str:
@@ -41,7 +49,7 @@ def calcular_id_estable(portal: str, id_nativo: str) -> str:
 
 
 def calcular_fingerprint(empresa: str, titulo: str, ubicacion: str) -> str:
-    crudo = "|".join(_clave(x) for x in (empresa, titulo, ubicacion))
+    crudo = "|".join((_clave(empresa), _clave(titulo), _clave_ubicacion(ubicacion)))
     return hashlib.sha256(crudo.encode()).hexdigest()[:16]
 
 

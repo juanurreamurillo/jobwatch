@@ -37,3 +37,10 @@ def test_resultado_conector_por_defecto_ok_vacio():
 
 def test_modalidad_default_desconocido():
     assert _vacante().modalidad == Modalidad.DESCONOCIDO
+
+
+def test_fingerprint_dc_insensible_a_mayusculas_y_acotado_a_ubicacion():
+    # D.C. suffix collapses regardless of case
+    assert calcular_fingerprint("X", "Y", "Bogotá D.C.") == calcular_fingerprint("X", "Y", "bogota d.c.") == calcular_fingerprint("X", "Y", "Bogotá")
+    # 'D.C.' inside a company name is NOT stripped (scope is location-only)
+    assert calcular_fingerprint("D.C. United", "Y", "Bogotá") != calcular_fingerprint("United", "Y", "Bogotá")
