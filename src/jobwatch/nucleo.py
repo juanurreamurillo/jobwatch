@@ -15,6 +15,7 @@ from jobwatch.modelos import (
     ResultadoConector,
     Vacante,
 )
+from jobwatch.reporte import render
 
 Conector = Callable[[Criterios], ResultadoConector]
 
@@ -120,3 +121,11 @@ def validar_scores(cosecha: Cosecha, lote: LotePuntajes) -> list[OfertaPuntuada]
             vacante=v, estado=p.estado, puntaje=p.puntaje, razon=p.razon,
         ))
     return ofertas
+
+
+def reportar(cosecha: Cosecha, ofertas: list[OfertaPuntuada], store, fecha: str) -> str:
+    """Fase 3, determinista: persiste TODAS las candidatas (puntuadas + sin_puntaje,
+    D13) con el hecho multi-portal, registra la corrida con detalle, y renderiza."""
+    store.persistir(cosecha.candidatas)
+    store.registrar_corrida(cosecha.estados)
+    return render(fecha, cosecha.estados, ofertas)

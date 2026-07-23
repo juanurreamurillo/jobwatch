@@ -137,3 +137,23 @@ def test_validar_scores_puntaje_fuera_de_rango():
         Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=150)])
     with pytest.raises(ScoresInvalidos, match="0.*100|rango"):
         validar_scores(cosecha, lote)
+
+
+def test_reportar_persiste_todas_y_renderiza(tmp_path):
+    from jobwatch.modelos import EstadoOferta, LotePuntajes, Puntaje
+    from jobwatch.nucleo import reportar, validar_scores
+    from jobwatch.store import Store
+
+    a, b = _v("1", titulo="Gerente"), _v("2", titulo="Analista")
+    cosecha = _cosecha_de([a, b])
+    lote = LotePuntajes(run_id=cosecha.run_id, puntajes=[
+        Puntaje(id_estable=a.id_estable, estado=EstadoOferta.PUNTUADA, puntaje=90, razon="top"),
+        Puntaje(id_estable=b.id_estable, estado=EstadoOferta.SIN_PUNTAJE, razon="fuera"),
+    ])
+    ofertas = validar_scores(cosecha, lote)
+    store = Store(str(tmp_path / "t.db"))
+    md = reportar(cosecha, ofertas, store, "2026-07-23")
+    # ambas persistidas (incluida la sin_puntaje) -> ya no son nuevas
+    assert store.es_nueva(a) is False and store.es_nueva(b) is False
+    assert "2026-07-23" in md and "Gerente" in md and "Analista" in md
+    store.cerrar()
