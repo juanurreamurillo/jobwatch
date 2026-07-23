@@ -119,7 +119,15 @@ def main(
             },
             "candidatas": [_json.loads(v.model_dump_json()) for v in cosecha.candidatas],
         }
-        print(_json.dumps(salida, ensure_ascii=False, indent=2))
+
+        if args.json:
+            print(_json.dumps(salida, ensure_ascii=False, indent=2))
+        else:
+            # Resumen en español
+            print(f"{len(cosecha.candidatas)} candidatas nuevas (tope {cosecha.tope}, run_id {cosecha.run_id}).")
+            for portal, r in cosecha.estados.items():
+                detalle_str = f" — {r.detalle}" if r.detalle else ""
+                print(f"  {portal}: {r.estado.value}{detalle_str}")
         return 0
 
     if args.cmd == "report":

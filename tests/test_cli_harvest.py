@@ -45,3 +45,22 @@ def test_harvest_tope_excedido_error_json(tmp_path, capsys):
     ], _conectores={"computrabajo": muchos})
     assert rc == 1
     assert "error" in json.loads(capsys.readouterr().out)
+
+
+def test_harvest_sin_json_imprime_resumen_español(tmp_path, capsys):
+    db = str(tmp_path / "j.db")
+    rc = main([
+        "harvest", "--config", _config(tmp_path), "--db", db,
+    ], _conectores=_conectores_falsos())
+    assert rc == 0
+    salida = capsys.readouterr().out
+    # debe NO ser JSON válido
+    try:
+        json.loads(salida)
+        assert False, "Sin --json debe imprimir resumen, no JSON"
+    except json.JSONDecodeError:
+        pass  # esperado: no es JSON
+    # debe contener marcadores en español
+    assert "candidatas" in salida.lower()
+    assert "computrabajo" in salida
+    assert not salida.strip().startswith("{")
