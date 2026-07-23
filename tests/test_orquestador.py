@@ -60,3 +60,26 @@ def test_colapsa_misma_oferta_en_dos_portales_por_prioridad():
 def test_no_colapsa_ofertas_distintas():
     vs = [_vp("computrabajo", empresa="A"), _vp("elempleo", empresa="B")]
     assert len(colapsar_lote(vs)) == 2
+
+
+def test_desempate_deterministico_mismo_portal_distinto_id_nativo():
+    # Mismo portal duplicado dentro de un mismo lote (misma prioridad):
+    # el ganador debe ser el mismo id_nativo sin importar el orden de entrada.
+    a = _vp("indeed", idn="1")
+    b = _vp("indeed", idn="2")
+    out_ab = colapsar_lote([a, b])
+    out_ba = colapsar_lote([b, a])
+    assert len(out_ab) == 1 and len(out_ba) == 1
+    assert out_ab[0].id_nativo == out_ba[0].id_nativo
+
+
+def test_desempate_deterministico_portales_no_listados():
+    # Dos portales fuera de PRIORIDAD_PORTAL (misma prioridad por defecto):
+    # el ganador debe ser el mismo portal sin importar el orden de entrada.
+    a = _vp("linkedin", idn="1")
+    b = _vp("glassdoor", idn="2")
+    out_ab = colapsar_lote([a, b])
+    out_ba = colapsar_lote([b, a])
+    assert len(out_ab) == 1 and len(out_ba) == 1
+    assert out_ab[0].portal == out_ba[0].portal
+    assert out_ab[0].portales == out_ba[0].portales == ["glassdoor", "linkedin"]

@@ -23,8 +23,8 @@ def colapsar_lote(vacantes: list[Vacante]) -> list[Vacante]:
 
     salida: list[Vacante] = []
     for grupo in grupos.values():
-        canon = min(grupo, key=lambda v: _prioridad(v.portal))
-        portales = sorted({v.portal for v in grupo}, key=_prioridad)
+        canon = min(grupo, key=lambda v: (_prioridad(v.portal), v.portal, v.id_nativo))
+        portales = sorted({v.portal for v in grupo}, key=lambda p: (_prioridad(p), p))
         canon.portales = portales
         salida.append(canon)
     return salida
