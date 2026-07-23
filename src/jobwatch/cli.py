@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import sys
 from pathlib import Path
 
 
@@ -18,6 +19,7 @@ def main(argv: list[str] | None = None) -> int:
     p_carta = sub.add_parser("carta", help="Redacta una carta para una oferta guardada.")
     p_carta.add_argument("id_estable")
     p_carta.add_argument("--db", default="jobwatch.db")
+    p_carta.add_argument("--cv", default="data/cv.txt", help="Ruta al archivo de CV (texto).")
 
     args = parser.parse_args(argv)
 
@@ -44,7 +46,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "carta":
         from jobwatch.cartas import redactar_desde_store
-        print(redactar_desde_store(args.id_estable, args.db))
+
+        ruta_cv = Path(args.cv)
+        cv = ruta_cv.read_text(encoding="utf-8") if ruta_cv.exists() else ""
+        if not cv.strip():
+            print(f"Error: el CV en {ruta_cv} no existe o está vacío.", file=sys.stderr)
+            return 1
+        print(redactar_desde_store(args.id_estable, args.db, cv))
         return 0
 
     return 1

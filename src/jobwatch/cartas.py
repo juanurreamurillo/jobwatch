@@ -16,7 +16,7 @@ def redactar(v: Vacante, cv: str, generar: Callable[[str], str]) -> str:
     return generar(prompt)
 
 
-def redactar_desde_store(id_estable: str, db: str) -> str:
+def redactar_desde_store(id_estable: str, db: str, cv: str) -> str:
     import sqlite3
 
     from jobwatch.llm import generar_texto
@@ -31,12 +31,4 @@ def redactar_desde_store(id_estable: str, db: str) -> str:
     if fila is None:
         raise ValueError(f"No existe una oferta con id_estable={id_estable}")
     v = Vacante(**json.loads(fila[0]))
-    cv = _leer_cv_por_defecto()
     return redactar(v, cv, generar_texto)
-
-
-def _leer_cv_por_defecto() -> str:
-    from pathlib import Path
-
-    ruta = Path("data/cv.txt")
-    return ruta.read_text(encoding="utf-8") if ruta.exists() else ""
