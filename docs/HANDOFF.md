@@ -7,7 +7,9 @@ D8–D15) y `docs/endpoints.md` (Fase 0).
 
 ## Estado actual (2026-07-23)
 
-Todo está en `main` del repo público `github.com/juanurreamurillo/jobwatch`.
+Repo público `github.com/juanurreamurillo/jobwatch`. MVP, Fase 0 y Plan A están
+en `main`; Plan B (release 0.1.0 incluido) vive en la rama
+`feat/plan-b-cli-skill`, pendiente de merge.
 
 - **MVP completo** (mergeado): modelos, normalización, store SQLite con dedup de
   dos niveles, matcher híbrido (filtro local + puntuación LLM con tope y
@@ -31,6 +33,22 @@ Todo está en `main` del repo público `github.com/juanurreamurillo/jobwatch`.
     conector propagado al reporte y a `corridas`; migración de schema
     (`PRAGMA user_version` + columna `portales`, retrocompatible con BD v0).
   - **69 tests, ruff limpio.**
+- **Plan B completo** (rama `feat/plan-b-cli-skill`, pendiente de merge a `main`):
+  **jobwatch como skill de Claude Code.** Diseño en `docs/design-skill.md` (D8–D15).
+  - **Core in-process** (§4.0): `cosechar` / `validar_scores` / `reportar` en
+    `nucleo`, usados tanto por los subcomandos del CLI como por `run`.
+  - **`harvest` + `report`** (D8): `harvest` es determinista, sin LLM, solo-lectura
+    y emite candidatas JSON con `run_id`; el tope D6 se hace cumplir ahí (D15).
+    Claude puntúa en contexto (sin API key); `report` valida **fail-loud** (D14:
+    mismo `run_id`, cobertura total de `id_estable`, `puntaje ∈ 0–100`) y
+    persiste+renderiza. `run` (ruta API-key, headless) corre sobre el mismo core.
+  - **`--config`** (§4.6): archivo que deserializa a `Criterios`, compartido por
+    skill y cron.
+  - **Bundle de la skill** (§5): `skill/SKILL.md` + `jobwatch.config.example.json`
+    + `references/scoring-rubric.md`. Cero datos personales.
+  - **Release 0.1.0** (§9/D10): versión, extras `build`/`twine` y build
+    verificado; listo para `twine upload` con el token de Juan (ver abajo).
+  - **92 tests, ruff limpio.**
 
 ### Cómo trabajar en este repo
 
@@ -46,26 +64,15 @@ Todo está en `main` del repo público `github.com/juanurreamurillo/jobwatch`.
   revisión adversarial de rama completa. El ledger de progreso del Plan A vive en
   `.superpowers/sdd/progress.md` (git-ignored).
 
-## Siguiente plan: Plan B — jobwatch como skill de Claude Code
+## Publicar en PyPI (paso manual, gated en el token de Juan)
 
-Diseño en `docs/design-skill.md`. Objetivo: empaquetar jobwatch como **skill
-pública de Claude Code** para que el desarrollador corra el agregador desde su CLI
-**sin API key** — el propio agente de la sesión puntúa contra el CV. Escribir y
-ejecutar el plan (usar `superpowers:writing-plans` →
-`superpowers:subagent-driven-development`). Alcance (design-skill.md §4, §5, §8):
+El build ya está verificado (`.venv/bin/python -m build` + `.venv/bin/twine check
+dist/*` → `PASSED` para `.tar.gz` y `.whl`). La subida real la corre Juan con su
+propio token — el agente no la ejecuta:
 
-- **Core in-process** (§4.0): extraer `cosechar` / `validar_scores` / `reportar`
-  de la lógica actual, para que tanto los subcomandos del CLI como `run` lo usen.
-- **Split `run` → `harvest` + `report`** (D8): `harvest` (determinista, sin LLM,
-  solo-lectura) emite candidatas JSON con un `run_id`; Claude las puntúa en
-  contexto; `report` valida **fail-loud** (D14: `run_id` igual, cobertura total de
-  `id_estable`, `puntaje ∈ 0–100`) y persiste+renderiza. El tope D6 se hace cumplir
-  en `harvest` (D15). `run` (ruta API-key, headless) se refactoriza sobre el core.
-- **`--config`** (§4.6): archivo que deserializa a `Criterios`, compartido por
-  skill y cron.
-- **Bundle de la skill** (§5): `SKILL.md` + `jobwatch.config.example.json` +
-  `references/scoring-rubric.md`. Cero datos personales.
-- **Publicar a PyPI** (§9/D10): la skill instala `jobwatch` vía `pip`.
+```bash
+.venv/bin/twine upload dist/*   # requiere ~/.pypirc o TWINE_* con el token de PyPI de Juan
+```
 
 ## Backlog heredado del Plan A (no bloquea, documentado)
 

@@ -42,6 +42,20 @@ Cada conector implementa el mismo contrato — `buscar(criterios) -> ResultadoCo
 
 Python · [`curl_cffi`](https://github.com/lexiforest/curl_cffi) · [`extruct`](https://github.com/scrapinghub/extruct) · [`pydantic`](https://github.com/pydantic/pydantic) · [`python-jobspy`](https://github.com/speedyapply/JobSpy)
 
+## Instalación
+
+```bash
+pipx install jobwatch          # cuando esté publicado en PyPI
+# o desde el repo:
+pipx install git+https://github.com/juanurreamurillo/jobwatch
+```
+
+### Como skill de Claude Code
+
+Instala el paquete (arriba) y la skill del directorio `skill/`. En tu sesión,
+`/jobwatch` cosecha, puntúa contra tu CV y reporta — sin API key. Ver
+[`skill/SKILL.md`](skill/SKILL.md).
+
 ## Uso local
 
 Instala el proyecto y sus dependencias en un entorno virtual, y provee tu CV como texto plano en `data/cv.txt` (esta carpeta está en `.gitignore` — nunca se sube):
