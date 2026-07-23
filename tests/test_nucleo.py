@@ -157,3 +157,20 @@ def test_reportar_persiste_todas_y_renderiza(tmp_path):
     assert store.es_nueva(a) is False and store.es_nueva(b) is False
     assert "2026-07-23" in md and "Gerente" in md and "Analista" in md
     store.cerrar()
+
+
+def test_puntuar_en_proceso_error_por_oferta_no_aborta():
+    from jobwatch.modelos import EstadoOferta
+    from jobwatch.nucleo import puntuar_en_proceso
+
+    a, b, c = _v("1"), _v("2", titulo="B"), _v("3", titulo="C")
+    cosecha = _cosecha_de([a, b, c])
+    def flaky(v, cv):
+        if v.id_nativo == "2":
+            raise RuntimeError("timeout")
+        return {"puntaje": 60, "razon": "ok"}
+    lote = puntuar_en_proceso(cosecha, "cv", flaky)
+    assert lote.run_id == cosecha.run_id
+    por_id = {p.id_estable: p for p in lote.puntajes}
+    assert por_id[a.id_estable].estado is EstadoOferta.PUNTUADA
+    assert por_id[b.id_estable].estado is EstadoOferta.SIN_PUNTAJE  # el fallo cae a sin_puntaje

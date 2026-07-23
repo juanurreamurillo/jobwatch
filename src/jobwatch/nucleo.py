@@ -12,6 +12,7 @@ from jobwatch.modelos import (
     LotePuntajes,
     OfertaPuntuada,
     PRIORIDAD_PORTAL,
+    Puntaje,
     ResultadoConector,
     Vacante,
 )
@@ -129,3 +130,24 @@ def reportar(cosecha: Cosecha, ofertas: list[OfertaPuntuada], store, fecha: str)
     store.persistir(cosecha.candidatas)
     store.registrar_corrida(cosecha.estados)
     return render(fecha, cosecha.estados, ofertas)
+
+
+PuntuadorLLM = Callable[[Vacante, str], dict]
+
+
+def puntuar_en_proceso(cosecha: Cosecha, cv: str, puntuador: PuntuadorLLM) -> LotePuntajes:
+    """Ruta API-key (§4.4): puntúa cada candidata con el callable del SDK y arma
+    el LotePuntajes que luego valida validar_scores. Fail-loud por oferta."""
+    puntajes: list[Puntaje] = []
+    for v in cosecha.candidatas:
+        try:
+            r = puntuador(v, cv)
+            puntajes.append(Puntaje(
+                id_estable=v.id_estable, estado=EstadoOferta.PUNTUADA,
+                puntaje=int(r["puntaje"]), razon=str(r.get("razon", "")),
+            ))
+        except Exception as e:  # no aborta el lote
+            puntajes.append(Puntaje(
+                id_estable=v.id_estable, estado=EstadoOferta.SIN_PUNTAJE, razon=str(e),
+            ))
+    return LotePuntajes(run_id=cosecha.run_id, puntajes=puntajes)

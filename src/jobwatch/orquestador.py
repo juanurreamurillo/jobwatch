@@ -1,37 +1,31 @@
 from __future__ import annotations
 
-from jobwatch.matcher import filtro_local, puntuar
-from jobwatch.modelos import Criterios, EstadoConector, ResultadoConector, Vacante
-from jobwatch.nucleo import Conector, TopeExcedido, calcular_run_id, colapsar_lote, cosechar  # noqa: F401
-from jobwatch.reporte import render
-from jobwatch.store import Store
+from jobwatch.modelos import Criterios, ResultadoConector
+from jobwatch.nucleo import (  # noqa: F401  (re-export para compat)
+    Conector,
+    PuntuadorLLM,
+    TopeExcedido,
+    calcular_run_id,
+    colapsar_lote,
+    cosechar,
+    puntuar_en_proceso,
+    reportar,
+    validar_scores,
+)
 
 
 def correr(
     criterios: Criterios,
     cv: str,
-    store: Store,
+    store,
     puntuador,
-    conectores: dict[str, Conector],
+    conectores: dict[str, "Conector"],
     fecha: str,
     tope: int = 50,
 ) -> tuple[str, dict[str, ResultadoConector]]:
-    resultados: dict[str, ResultadoConector] = {}
-    cosechadas: list[Vacante] = []
-    for nombre, conector in conectores.items():
-        try:
-            r = conector(criterios)
-        except Exception as e:  # fail-loud sin abortar la corrida completa (D2)
-            r = ResultadoConector(estado=EstadoConector.ERROR, detalle=str(e))
-        resultados[nombre] = r
-        cosechadas.extend(r.vacantes)
-
-    nuevas = [
-        v for v in colapsar_lote(cosechadas)
-        if store.es_nueva(v) and filtro_local(v, criterios)
-    ]
-
-    ofertas = puntuar(nuevas, cv, puntuador, tope=tope)
-    store.persistir(nuevas)
-    store.registrar_corrida(resultados)
-    return render(fecha, resultados, ofertas), resultados
+    """Ruta API-key sobre el core: un solo pipeline, dos puntos de entrada (§4.4)."""
+    cosecha = cosechar(criterios, store, conectores, tope, fecha)
+    lote = puntuar_en_proceso(cosecha, cv, puntuador)
+    ofertas = validar_scores(cosecha, lote)
+    md = reportar(cosecha, ofertas, store, fecha)
+    return md, cosecha.estados
