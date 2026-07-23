@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es-CO">
+<body>
+<!-- ============================================================
+  FIXTURE recortado de www.magneto365.com/co/trabajos/buscar
+  (SSR real, capturado 2026-07-23). Recortado a 2 ofertas.
+  Los ids/URLs del JSON-LD y de los cards COINCIDEN:
+    1004184  y  1004183
+  Notas de estructura reales:
+   - JSON-LD ItemList.itemListElement[i] solo trae {@type, position, url}
+     (SIN name / SIN title). El id nativo = digitos finales de .url
+   - Card: <article> ; titulo+url en h2>a ; empresa+contrato en h3
+     ("Empresa | Tipo contrato") ; p#1 = salario ; p#2 = ubicacion
+   - fecha_publicacion NO viene en SSR: el span _published_ queda vacio
+     (BAILOUT_TO_CLIENT_SIDE_RENDERING)
+============================================================ -->
+
+<script id="ItemList" type="application/ld+json" strategy="afterInteractive">{"@context":"https://schema.org","@type":"ItemList","name":"Ofertas de empleo en Colombia","itemListElement":[{"@type":"ListItem","position":1,"url":"https://www.magneto365.com/co/empleos/gestor-de-servicio-en-sitio-1004184"},{"@type":"ListItem","position":2,"url":"https://www.magneto365.com/co/empleos/auxiliar-de-nomina-midasoft-1004183"}]}</script>
+
+<section class="mg_job_card_desktop_magneto-ui-card-jobs_container_13c81 ">
+
+  <article class="mg_job_card_desktop_magneto-ui-card-jobs_13c81 ">
+    <div class="mg_job_card_desktop_magneto-ui-card-jobs_data_13c81">
+      <section class="mg_job_card_desktop_magneto-ui-card-jobs_header_13c81">
+        <span class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 mg_job_card_desktop_magneto-ui-card-jobs_published_13c81"><!--$!--><template data-dgst="BAILOUT_TO_CLIENT_SIDE_RENDERING"></template><!--/$--></span>
+        <section class="mg_job_card_desktop_magneto-ui-card-jobs_options_13c81 opciones"></section>
+      </section>
+      <h2 class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81  mg_job_card_desktop_magneto-ui-card-jobs_text--big_13c81 mg_job_card_desktop_magneto-ui-card-jobs_text--bold_13c81"><a href="https://www.magneto365.com/co/empleos/gestor-de-servicio-en-sitio-1004184" title="Gestor de servicio en sitio" target="_blank" rel="noreferrer" class="mg_job_card_desktop_magneto-ui-card-jobs_a_13c81">Gestor de servicio en sitio</a></h2>
+      <h3 class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">Confidencial | Término indefinido</h3>
+      <p class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">$&nbsp;500.000 a $&nbsp;3.000.000, </p>
+      <p class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">Bogotá, D.C.</p>
+    </div>
+  </article>
+
+  <article class="mg_job_card_desktop_magneto-ui-card-jobs_13c81 ">
+    <div class="mg_job_card_desktop_magneto-ui-card-jobs_data_13c81">
+      <section class="mg_job_card_desktop_magneto-ui-card-jobs_header_13c81">
+        <span class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 mg_job_card_desktop_magneto-ui-card-jobs_published_13c81"><!--$!--><template data-dgst="BAILOUT_TO_CLIENT_SIDE_RENDERING"></template><!--/$--></span>
+        <section class="mg_job_card_desktop_magneto-ui-card-jobs_options_13c81 opciones"></section>
+      </section>
+      <h2 class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81  mg_job_card_desktop_magneto-ui-card-jobs_text--big_13c81 mg_job_card_desktop_magneto-ui-card-jobs_text--bold_13c81"><a href="https://www.magneto365.com/co/empleos/auxiliar-de-nomina-midasoft-1004183" title="Auxiliar de nómina (Midasoft)" target="_blank" rel="noreferrer" class="mg_job_card_desktop_magneto-ui-card-jobs_a_13c81">Auxiliar de nómina (Midasoft)</a></h2>
+      <h3 class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">Confidencial | Término indefinido</h3>
+      <p class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">$&nbsp;2.532.802, </p>
+      <p class="mg_job_card_desktop_magneto-ui-card-jobs_text_13c81 ">Medellín - Itagui - La Estrella - Envigado</p>
+    </div>
+  </article>
+
+</section>
+</body>
+</html>
