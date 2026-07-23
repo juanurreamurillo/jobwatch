@@ -16,15 +16,21 @@ def _conectores_reales() -> dict:
     }
 
 
-def main(argv: list[str] | None = None, _conectores: dict | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    _conectores: dict | None = None,
+    _puntuador=None,
+) -> int:
     parser = argparse.ArgumentParser(prog="jobwatch", description="Agregador de empleos.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_run = sub.add_parser("run", help="Corre la búsqueda y escribe el reporte.")
-    p_run.add_argument("--terminos", required=True)
+    p_run.add_argument("--terminos", default=None)
+    p_run.add_argument("--config", default=None)
     p_run.add_argument("--ubicacion", default=None)
     p_run.add_argument("--cv", required=True, help="Ruta al archivo de CV (texto).")
     p_run.add_argument("--db", default="jobwatch.db")
+    p_run.add_argument("--tope", type=int, default=50)
 
     p_carta = sub.add_parser("carta", help="Redacta una carta para una oferta guardada.")
     p_carta.add_argument("id_estable")
@@ -46,23 +52,26 @@ def main(argv: list[str] | None = None, _conectores: dict | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "run":
-        from jobwatch.conectores import computrabajo, elempleo, indeed, magneto
+        from jobwatch.config import cargar_criterios
         from jobwatch.llm import puntuador_real
         from jobwatch.modelos import Criterios
         from jobwatch.orquestador import correr
         from jobwatch.store import Store
 
+        if args.config:
+            criterios = cargar_criterios(args.config)
+        elif args.terminos:
+            criterios = Criterios(terminos=args.terminos, ubicacion=args.ubicacion)
+        else:
+            print("Error: pasa --config o --terminos.", file=sys.stderr)
+            return 1
+
         cv = Path(args.cv).read_text(encoding="utf-8")
-        criterios = Criterios(terminos=args.terminos, ubicacion=args.ubicacion)
         store = Store(args.db)
-        conectores = {
-            "computrabajo": computrabajo.buscar,
-            "elempleo": elempleo.buscar,
-            "magneto": magneto.buscar,
-            "indeed": indeed.buscar,
-        }
+        conectores = _conectores if _conectores is not None else _conectores_reales()
+        puntuador = _puntuador if _puntuador is not None else puntuador_real
         fecha = _dt.date.today().isoformat()
-        md, _ = correr(criterios, cv, store, puntuador_real, conectores, fecha)
+        md, _ = correr(criterios, cv, store, puntuador, conectores, fecha, args.tope)
         store.cerrar()
 
         destino = Path("reportes") / f"{fecha}.md"

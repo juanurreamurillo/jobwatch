@@ -1,7 +1,7 @@
 import json
 
 from jobwatch.cli import main
-from jobwatch.modelos import Vacante
+from jobwatch.modelos import EstadoConector, ResultadoConector, Vacante
 from jobwatch.nucleo import calcular_run_id
 
 
@@ -45,3 +45,20 @@ def test_report_run_id_desalineado_aborta(tmp_path, capsys):
                "--db", str(tmp_path / "j.db")])
     assert rc == 1
     assert "run_id" in capsys.readouterr().err
+
+
+def test_run_con_config_y_conectores_inyectados(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cfg = tmp_path / "c.json"
+    cfg.write_text(json.dumps({"terminos": "gerente"}), encoding="utf-8")
+    cv = tmp_path / "cv.txt"
+    cv.write_text("Gerente de proyectos con 10 años.", encoding="utf-8")
+    v = Vacante(id_nativo="1", portal="computrabajo", titulo="Gerente", empresa="ACME",
+                ubicacion="Bogotá", url="https://x/1")
+    conectores = {"computrabajo": lambda c: ResultadoConector(estado=EstadoConector.OK, vacantes=[v])}
+    rc = main(
+        ["run", "--config", str(cfg), "--cv", str(cv), "--db", str(tmp_path / "j.db")],
+        _conectores=conectores, _puntuador=lambda vac, cv: {"puntaje": 91, "razon": "ok"},
+    )
+    assert rc == 0
+    assert (tmp_path / "reportes").exists()
