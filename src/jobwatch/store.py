@@ -32,6 +32,18 @@ class Store:
             """
         )
         self.con.commit()
+        self._migrar()
+
+    def _migrar(self) -> None:
+        version = self.con.execute("PRAGMA user_version").fetchone()[0]
+        if version < 1:
+            cols = [r[1] for r in self.con.execute("PRAGMA table_info(vacantes)")]
+            if "portales" not in cols:
+                self.con.execute(
+                    "ALTER TABLE vacantes ADD COLUMN portales TEXT NOT NULL DEFAULT '[]'"
+                )
+            self.con.execute("PRAGMA user_version = 1")
+            self.con.commit()
 
     def es_nueva(self, v: Vacante) -> bool:
         cur = self.con.execute(
@@ -44,13 +56,13 @@ class Store:
         self.con.executemany(
             """
             INSERT INTO vacantes
-                (id_estable, fingerprint_contenido, portal, titulo, empresa, url, datos)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id_estable, fingerprint_contenido, portal, titulo, empresa, url, portales, datos)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id_estable) DO NOTHING
             """,
             [
                 (v.id_estable, v.fingerprint_contenido, v.portal, v.titulo,
-                 v.empresa, v.url, v.model_dump_json())
+                 v.empresa, v.url, json.dumps(v.portales), v.model_dump_json())
                 for v in vacantes
             ],
         )

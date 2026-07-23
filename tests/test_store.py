@@ -1,3 +1,6 @@
+import json
+import sqlite3
+
 from jobwatch.modelos import EstadoConector, Vacante
 from jobwatch.store import Store
 
@@ -36,3 +39,40 @@ def test_registrar_corrida_devuelve_id_incremental(tmp_path):
     id2 = s.registrar_corrida({"indeed": EstadoConector.ERROR})
     assert id2 > id1
     s.cerrar()
+
+
+def test_persistir_guarda_portales(tmp_path):
+    ruta = str(tmp_path / "j.db")
+    store = Store(ruta)
+    from jobwatch.modelos import Vacante
+
+    v = Vacante(id_nativo="1", portal="computrabajo", titulo="X", empresa="ACME",
+                ubicacion="Bogotá", url="https://x/1", portales=["computrabajo", "magneto"])
+    store.persistir([v])
+    store.cerrar()
+    con = sqlite3.connect(ruta)
+    fila = con.execute("SELECT portales FROM vacantes WHERE id_estable = ?", (v.id_estable,)).fetchone()
+    assert json.loads(fila[0]) == ["computrabajo", "magneto"]
+
+
+def test_migra_base_v0_existente(tmp_path):
+    ruta = str(tmp_path / "viejo.db")
+    # base v0: tabla vacantes SIN columna portales, user_version 0
+    con = sqlite3.connect(ruta)
+    con.executescript(
+        """
+        CREATE TABLE vacantes (
+            id_estable TEXT PRIMARY KEY, fingerprint_contenido TEXT NOT NULL,
+            portal TEXT NOT NULL, titulo TEXT NOT NULL, empresa TEXT NOT NULL,
+            url TEXT NOT NULL, datos TEXT NOT NULL);
+        CREATE TABLE corridas (id INTEGER PRIMARY KEY AUTOINCREMENT, estados TEXT NOT NULL);
+        """
+    )
+    con.commit()
+    con.close()
+    # abrir con Store debe migrar sin perder la fila y añadir la columna
+    store = Store(ruta)
+    assert store.con.execute("PRAGMA user_version").fetchone()[0] == 1
+    cols = [r[1] for r in store.con.execute("PRAGMA table_info(vacantes)")]
+    assert "portales" in cols
+    store.cerrar()
