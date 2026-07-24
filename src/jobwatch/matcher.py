@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from jobwatch.modelos import Criterios, Modalidad, Vacante
 
 
@@ -14,3 +16,18 @@ def filtro_local(v: Vacante, c: Criterios) -> bool:
         if v.modalidad is not c.modalidad:
             return False
     return True
+
+
+def filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool:
+    """Recorte de recencia central (D22). Conserva no-fechables (D19). `dias=None`
+    = sin filtro. Predicado exacto (D16): datable pasa si (hoy - fecha).days < dias.
+    Asume fecha_publicacion ya normalizada a ISO por cosechar."""
+    if dias is None:
+        return True
+    if not v.fecha_publicacion:
+        return True  # no fechable -> incluir marcada (D19)
+    try:
+        f = date.fromisoformat(v.fecha_publicacion[:10])
+    except ValueError:
+        return True
+    return (hoy - f).days < dias

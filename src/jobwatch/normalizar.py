@@ -69,3 +69,16 @@ def parsear_fecha_relativa(texto: str, hoy: date) -> date | None:
     if factor is None:
         return None
     return hoy - timedelta(days=n * factor)
+
+
+def normalizar_fecha_publicacion(raw: str | None, hoy: date) -> str | None:
+    """Fecha cruda scrapeada (ISO o texto relativo) -> ISO 'YYYY-MM-DD' o None.
+    `hoy` inyectado (determinista). Central (D22): el conector no lee reloj."""
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10]).isoformat()  # ya venía ISO
+    except ValueError:
+        pass
+    f = parsear_fecha_relativa(raw, hoy)
+    return f.isoformat() if f else None

@@ -3,7 +3,7 @@ from datetime import date
 from jobwatch.modelos import Modalidad
 from jobwatch.normalizar import (
     normalizar_texto, normalizar_ubicacion, normalizar_modalidad, parsear_salario,
-    parsear_fecha_relativa,
+    parsear_fecha_relativa, normalizar_fecha_publicacion,
 )
 
 
@@ -63,3 +63,19 @@ def test_fecha_relativa_dias_semanas_meses():
 def test_fecha_relativa_no_fechable_es_none():
     assert parsear_fecha_relativa("", HOY) is None
     assert parsear_fecha_relativa("Publicación reciente", HOY) is None
+
+
+HOY2 = date(2026, 7, 23)
+
+
+def test_normaliza_relativa_a_iso():
+    assert normalizar_fecha_publicacion("Hace 2 días", HOY2) == "2026-07-21"
+
+
+def test_normaliza_iso_pasa_igual():
+    assert normalizar_fecha_publicacion("2026-07-21T12:00:00.000Z", HOY2) == "2026-07-21"
+
+
+def test_normaliza_none_y_no_fechable():
+    assert normalizar_fecha_publicacion(None, HOY2) is None
+    assert normalizar_fecha_publicacion("cualquier cosa", HOY2) is None

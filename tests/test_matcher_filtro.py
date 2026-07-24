@@ -1,5 +1,7 @@
+from datetime import date
+
 from jobwatch.modelos import Criterios, Modalidad, Vacante
-from jobwatch.matcher import filtro_local
+from jobwatch.matcher import filtro_local, filtro_recencia
 
 
 def _v(**over):
@@ -33,3 +35,25 @@ def test_rechaza_por_modalidad_solo_si_conocida():
     assert filtro_local(_v(modalidad=Modalidad.PRESENCIAL), c) is False
     assert filtro_local(_v(modalidad=Modalidad.REMOTO), c) is True
     assert filtro_local(_v(modalidad=Modalidad.DESCONOCIDO), c) is True
+
+
+HOY = date(2026, 7, 23)
+
+
+def _vf(fecha):
+    return Vacante(id_nativo="1", portal="x", titulo="t", empresa="e",
+                   ubicacion="u", url="http://x", fecha_publicacion=fecha)
+
+
+def test_recencia_none_no_filtra():
+    assert filtro_recencia(_vf("2020-01-01"), None, HOY) is True
+
+
+def test_recencia_dias2_es_hoy_y_ayer():
+    assert filtro_recencia(_vf("2026-07-23"), 2, HOY) is True   # hoy
+    assert filtro_recencia(_vf("2026-07-22"), 2, HOY) is True   # ayer
+    assert filtro_recencia(_vf("2026-07-21"), 2, HOY) is False  # anteayer FUERA
+
+
+def test_recencia_no_fechable_se_incluye():
+    assert filtro_recencia(_vf(None), 2, HOY) is True

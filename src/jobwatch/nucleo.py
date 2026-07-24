@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from typing import Callable
 
-from jobwatch.matcher import filtro_local
+from jobwatch.matcher import filtro_local, filtro_recencia
 from jobwatch.modelos import (
     Cosecha,
     Criterios,
@@ -16,6 +17,7 @@ from jobwatch.modelos import (
     ResultadoConector,
     Vacante,
 )
+from jobwatch.normalizar import normalizar_fecha_publicacion
 from jobwatch.reporte import render
 
 Conector = Callable[[Criterios], ResultadoConector]
@@ -71,9 +73,15 @@ def cosechar(
         estados[nombre] = r
         cosechadas.extend(r.vacantes)
 
+    hoy = date.fromisoformat(fecha)
+    for v in cosechadas:
+        v.fecha_publicacion = normalizar_fecha_publicacion(v.fecha_publicacion, hoy)
+
     nuevas = [
         v for v in colapsar_lote(cosechadas)
-        if store.es_nueva(v) and filtro_local(v, criterios)
+        if store.es_nueva(v)
+        and filtro_local(v, criterios)
+        and filtro_recencia(v, criterios.dias, hoy)
     ]
     if len(nuevas) > tope:
         raise TopeExcedido(
