@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import date
 
+from jobwatch.conectores._comun import coincide_termino
 from jobwatch.modelos import Criterios, Modalidad, Vacante
 
 
 def filtro_local(v: Vacante, c: Criterios) -> bool:
     texto = f"{v.titulo} {v.descripcion_raw}".lower()
     if any(kw.lower() in texto for kw in c.excluir):
+        return False
+    if not coincide_termino(v.titulo, c.terminos):
         return False
     if c.salario_min is not None and v.salario_max is not None:
         if v.salario_max < c.salario_min:

@@ -44,3 +44,19 @@ def test_fetch_falla_es_error():
 
     r = buscar(Criterios(terminos="x"), fetch=explota)
     assert r.estado is EstadoConector.ERROR and "503" in r.detalle
+
+
+def test_buscar_reintenta_fallo_transitorio():
+    """Magneto es la fuente con latencia errática medida; su `buscar` debe pedir
+    reintento a `ejecutar` para que un timeout puntual no borre la fuente entera."""
+    intentos = {"n": 0}
+    def fetch(url):
+        if url.endswith("/gerente-de-proyectos"):
+            intentos["n"] += 1
+            if intentos["n"] == 1:
+                raise RuntimeError("Operation timed out after 30000 milliseconds")
+        return FIXTURE if intentos["n"] and url.endswith("/gerente-de-proyectos") else ""
+    r = buscar(Criterios(terminos="gerente de proyectos"), fetch=fetch)
+    assert r.estado is EstadoConector.OK
+    assert intentos["n"] == 2          # falló una vez, reintentó y siguió
+    assert len(r.vacantes) > 0

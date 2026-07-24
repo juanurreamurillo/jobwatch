@@ -22,9 +22,10 @@ def correr(
     conectores: dict[str, "Conector"],
     fecha: str,
     tope: int = 50,
+    detalles: dict | None = None,
 ) -> tuple[str, dict[str, ResultadoConector]]:
     """Ruta API-key sobre el core: un solo pipeline, dos puntos de entrada (§4.4)."""
-    cosecha = cosechar(criterios, store, conectores, tope, fecha)
+    cosecha = cosechar(criterios, store, conectores, tope, fecha, detalles=detalles)
     lote = puntuar_en_proceso(cosecha, cv, puntuador)
     ofertas = validar_scores(cosecha, lote)
     md = reportar(cosecha, ofertas, store, fecha)

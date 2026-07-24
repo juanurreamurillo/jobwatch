@@ -43,7 +43,7 @@ def test_cosechar_es_solo_lectura(tmp_path):
 def test_cosechar_excluye_ya_vistas(tmp_path):
     store = Store(str(tmp_path / "t.db"))
     store.persistir([_v("1")])
-    conectores = {"indeed": _ok([_v("1"), _v("2", titulo="Nueva")])}
+    conectores = {"indeed": _ok([_v("1"), _v("2", titulo="Dev Nueva")])}
     cosecha = cosechar(Criterios(terminos="dev"), store, conectores, tope=50, fecha="2026-07-23")
     assert [v.id_nativo for v in cosecha.candidatas] == ["2"]
     store.cerrar()
@@ -174,3 +174,78 @@ def test_puntuar_en_proceso_error_por_oferta_no_aborta():
     por_id = {p.id_estable: p for p in lote.puntajes}
     assert por_id[a.id_estable].estado is EstadoOferta.PUNTUADA
     assert por_id[b.id_estable].estado is EstadoOferta.SIN_PUNTAJE  # el fallo cae a sin_puntaje
+
+
+# --- Enriquecimiento con el detalle de la oferta (hallazgo #1) ---
+
+def test_cosechar_enriquece_descripcion_vacia(tmp_path):
+    """Computrabajo y elempleo emiten la tarjeta sin descripción; sin ella no se
+    puede juzgar si la vacante exige inglés."""
+    store = Store(str(tmp_path / "t.db"))
+    v = _v("1", portal="computrabajo", titulo="Dev")
+    cosecha = cosechar(
+        Criterios(terminos="dev"), store, {"c": _ok([v])}, tope=50, fecha="2026-07-23",
+        detalles={"computrabajo": lambda url: "Se requiere inglés B2 para este cargo."},
+    )
+    assert "inglés" in cosecha.candidatas[0].descripcion_raw
+    store.cerrar()
+
+
+def test_cosechar_no_refetchea_si_ya_hay_descripcion(tmp_path):
+    """Indeed ya trae descripción: gastar una petición más sería puro desperdicio."""
+    store = Store(str(tmp_path / "t.db"))
+    v = _v("1", portal="indeed", titulo="Dev")
+    v.descripcion_raw = "ya venía completa"
+    llamadas = []
+    cosechar(
+        Criterios(terminos="dev"), store, {"i": _ok([v])}, tope=50, fecha="2026-07-23",
+        detalles={"indeed": lambda url: llamadas.append(url) or "otra cosa"},
+    )
+    assert llamadas == []
+    store.cerrar()
+
+
+def test_cosechar_detalle_que_falla_no_tumba_la_corrida(tmp_path):
+    """Fail-soft por vacante: una oferta cuyo detalle no carga sigue siendo
+    candidata, solo que sin descripción."""
+    store = Store(str(tmp_path / "t.db"))
+    def explota(url):
+        raise RuntimeError("timeout")
+    cosecha = cosechar(
+        Criterios(terminos="dev"), store,
+        {"c": _ok([_v("1", portal="computrabajo", titulo="Dev")])},
+        tope=50, fecha="2026-07-23", detalles={"computrabajo": explota},
+    )
+    assert len(cosecha.candidatas) == 1
+    assert cosecha.candidatas[0].descripcion_raw == ""
+    store.cerrar()
+
+
+def test_cosechar_aplica_excluir_sobre_la_descripcion_traida(tmp_path):
+    """El filtro `excluir` mira título+descripción. Si la descripción llega
+    después del filtro, `excluir` nunca la ve: hay que re-filtrar tras enriquecer."""
+    store = Store(str(tmp_path / "t.db"))
+    cosecha = cosechar(
+        Criterios(terminos="dev", excluir=["call center"]), store,
+        {"c": _ok([_v("1", portal="computrabajo", titulo="Dev")])},
+        tope=50, fecha="2026-07-23",
+        detalles={"computrabajo": lambda url: "Operación de call center en turnos."},
+    )
+    assert cosecha.candidatas == []
+    store.cerrar()
+
+
+def test_cosechar_resuelve_modalidad_desconocida_desde_el_detalle(tmp_path):
+    """Indeed deja vacantes en modalidad desconocida; si el detalle dice
+    'presencial', el filtro de remoto debe poder descartarlas."""
+    from jobwatch.modelos import Modalidad
+
+    store = Store(str(tmp_path / "t.db"))
+    cosecha = cosechar(
+        Criterios(terminos="dev", modalidad=Modalidad.REMOTO), store,
+        {"c": _ok([_v("1", portal="computrabajo", titulo="Dev")])},
+        tope=50, fecha="2026-07-23",
+        detalles={"computrabajo": lambda url: "Modalidad: presencial en Bogotá."},
+    )
+    assert cosecha.candidatas == []
+    store.cerrar()

@@ -11,16 +11,18 @@ from jobwatch.modelos import (
     EstadoConector,
     EstadoOferta,
     LotePuntajes,
+    Modalidad,
     OfertaPuntuada,
     PRIORIDAD_PORTAL,
     Puntaje,
     ResultadoConector,
     Vacante,
 )
-from jobwatch.normalizar import normalizar_fecha_publicacion
+from jobwatch.normalizar import normalizar_fecha_publicacion, normalizar_modalidad
 from jobwatch.reporte import render
 
 Conector = Callable[[Criterios], ResultadoConector]
+Detalle = Callable[[str], str]
 
 
 class TopeExcedido(Exception):
@@ -54,12 +56,39 @@ def calcular_run_id(candidatas: list[Vacante], fecha: str) -> str:
     return hashlib.sha256(f"{fecha}|{ids}".encode()).hexdigest()[:8]
 
 
+def _enriquecer(vacantes: list[Vacante], detalles: dict[str, Detalle]) -> None:
+    """Trae la descripción desde la página de la oferta para las que llegan sin
+    ella. Computrabajo y elempleo solo emiten la tarjeta del listado, y sin
+    descripción no hay forma de decidir si la vacante exige inglés.
+
+    Va DESPUÉS de los filtros baratos, para pagar una petición solo por las que
+    sobrevivieron. Fail-soft por vacante (a diferencia del fail-loud por conector):
+    si un detalle no carga, la candidata sigue viva, solo que sin descripción —
+    perder una oferta pesa más que reportarla incompleta."""
+    for v in vacantes:
+        if v.descripcion_raw:  # indeed ya la trae; no gastes otra petición
+            continue
+        fn = detalles.get(v.portal)
+        if fn is None:
+            continue
+        try:
+            descripcion = fn(v.url)
+        except Exception:
+            continue
+        if not descripcion:
+            continue
+        v.descripcion_raw = descripcion
+        if v.modalidad is Modalidad.DESCONOCIDO:
+            v.modalidad = normalizar_modalidad(descripcion)
+
+
 def cosechar(
     criterios: Criterios,
     store,
     conectores: dict[str, Conector],
     tope: int,
     fecha: str,
+    detalles: dict[str, Detalle] | None = None,
 ) -> Cosecha:
     """Fase 1, determinista y SOLO-LECTURA (D13): corre conectores, deduplica
     (en-lote + cross-run), filtra localmente, hace cumplir el tope (D15). No persiste."""
@@ -83,6 +112,12 @@ def cosechar(
         and filtro_local(v, criterios)
         and filtro_recencia(v, criterios.dias, hoy)
     ]
+    if detalles:
+        _enriquecer(nuevas, detalles)
+        # Re-filtrar: `excluir` mira título+descripción y la modalidad puede haberse
+        # resuelto recién ahora, así que el primer paso las juzgó a ciegas.
+        nuevas = [v for v in nuevas if filtro_local(v, criterios)]
+
     if len(nuevas) > tope:
         raise TopeExcedido(
             f"tope excedido: {len(nuevas)} > {tope}; revisa el filtro local "

@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from jobwatch.conectores._comun import ejecutar, slug, texto
+from jobwatch.conectores._comun import ejecutar, fetch_curl, slug, texto
 from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
@@ -34,6 +34,27 @@ def _url(criterios: Criterios, pagina: int = 1) -> str:
         params.append(f"p={pagina}")
     qs = ("?" + "&".join(params)) if params else ""
     return f"{HOST}{ruta}{qs}"
+
+
+_ANCLA_DETALLE = "descripción de la oferta"
+
+
+def extraer_detalle(html: str) -> str:
+    """Descripción desde la página de la oferta. Ancla en el encabezado
+    'Descripción de la oferta' y toma su contenedor, en vez de colgarse de clases
+    utilitarias (`div.mb40.pb40.bb1`) que cambian con cualquier retoque de estilo.
+    El bloque incluye salario, tipo de contrato y modalidad además del cuerpo."""
+    sopa = BeautifulSoup(html, "lxml")
+    for h in sopa.find_all(["h1", "h2", "h3"]):
+        if h.get_text(strip=True).lower().startswith(_ANCLA_DETALLE):
+            contenedor = h.find_parent(["div", "section"])
+            if contenedor is not None:
+                return texto(contenedor)
+    return " ".join(texto(p) for p in sopa.select("p.mbB")).strip()
+
+
+def detalle(url: str, fetch=None) -> str:
+    return extraer_detalle((fetch or fetch_curl)(url))
 
 
 def _a_vacante(art, criterios: Criterios) -> Vacante:

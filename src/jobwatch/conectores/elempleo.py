@@ -4,7 +4,7 @@ import json
 
 from bs4 import BeautifulSoup
 
-from jobwatch.conectores._comun import ejecutar, id_de_url, slug
+from jobwatch.conectores._comun import ejecutar, fetch_curl, id_de_url, slug
 from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
@@ -105,5 +105,26 @@ def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
     return vacantes, omitidas, len(items)  # n_crudo = items del ItemList
 
 
+def extraer_detalle(html: str) -> str:
+    """Descripción desde la página de la oferta. elempleo la encierra en un solo
+    contenedor semántico, así que no hace falta anclar por encabezado."""
+    bloque = BeautifulSoup(html, "lxml").select_one("div.description-block")
+    return " ".join(bloque.get_text(" ").split()) if bloque else ""
+
+
+def detalle(url: str, fetch=None) -> str:
+    return extraer_detalle((fetch or fetch_curl)(url))
+
+
+def _es_fin_paginacion(e: Exception) -> bool:
+    """elempleo responde 404 a una página que no existe: es el final del listado,
+    no una fuente rota. Prefiere el status_code real y cae al texto si no lo hay."""
+    respuesta = getattr(e, "response", None)
+    codigo = getattr(respuesta, "status_code", None)
+    if codigo is not None:
+        return codigo == 404
+    return "404" in str(e)
+
+
 def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    return ejecutar(criterios, _url, fetch, _extraer, pausa=1.0)
+    return ejecutar(criterios, _url, fetch, _extraer, pausa=1.0, es_fin=_es_fin_paginacion)

@@ -91,3 +91,18 @@ def test_extraer_sin_modalidad_en_criterios_es_desconocida():
     vacantes, _, _ = _extraer(FIXTURE, Criterios(terminos="gerente de proyectos"))
     assert len(vacantes) == 2
     assert all(v.modalidad is Modalidad.DESCONOCIDO for v in vacantes)
+
+
+def test_404_tras_pagina1_es_fin_limpio_no_cobertura_parcial():
+    """elempleo responde 404 al pedir una página que no existe. Eso es el final
+    del listado, no una fuente rota (hallazgo #4)."""
+    from jobwatch.modelos import EstadoConector
+
+    def fetch(url):
+        if url.split("?")[0].rstrip("/").endswith("/2"):
+            raise RuntimeError("HTTP Error 404: ")
+        return FIXTURE
+    r = buscar(Criterios(terminos="gerente de proyectos"), fetch=fetch)
+    assert r.estado is EstadoConector.OK
+    assert len(r.vacantes) == 2          # las de la página 1, conservadas
+    assert "parcial" not in r.detalle.lower()

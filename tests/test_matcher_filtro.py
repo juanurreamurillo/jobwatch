@@ -57,3 +57,19 @@ def test_recencia_dias2_es_hoy_y_ayer():
 
 def test_recencia_no_fechable_se_incluye():
     assert filtro_recencia(_vf(None), 2, HOY) is True
+
+
+def test_filtro_local_descarta_titulo_ajeno_al_termino():
+    """El portal degrada a resultados vagamente relacionados: pidiendo 'gerente de
+    proyectos' devuelve 'gestor comercial'. coincide_termino existía y estaba
+    testeado, pero nunca se cableó al filtro (hallazgo #2)."""
+    v = Vacante(id_nativo="1", portal="computrabajo", titulo="gestor comercial",
+                empresa="e", ubicacion="Bogotá", url="http://x/1")
+    assert filtro_local(v, Criterios(terminos="gerente de proyectos")) is False
+
+
+def test_filtro_local_conserva_titulo_que_cubre_el_termino():
+    v = Vacante(id_nativo="2", portal="computrabajo",
+                titulo="Gerente de Proyectos TI Senior",
+                empresa="e", ubicacion="Bogotá", url="http://x/2")
+    assert filtro_local(v, Criterios(terminos="gerente de proyectos")) is True

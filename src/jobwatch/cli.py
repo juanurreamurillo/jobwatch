@@ -16,10 +16,22 @@ def _conectores_reales() -> dict:
     }
 
 
+def _detalles_reales() -> dict:
+    """Portal -> extractor de la descripción desde la página de la oferta. Solo
+    los que emiten la tarjeta sin descripción; indeed ya la trae vía JobSpy."""
+    from jobwatch.conectores import computrabajo, elempleo, magneto
+    return {
+        "computrabajo": computrabajo.detalle,
+        "elempleo": elempleo.detalle,
+        "magneto": magneto.detalle,
+    }
+
+
 def main(
     argv: list[str] | None = None,
     _conectores: dict | None = None,
     _puntuador=None,
+    _detalles: dict | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="jobwatch", description="Agregador de empleos.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -71,7 +83,10 @@ def main(
         conectores = _conectores if _conectores is not None else _conectores_reales()
         puntuador = _puntuador if _puntuador is not None else puntuador_real
         fecha = _dt.date.today().isoformat()
-        md, _ = correr(criterios, cv, store, puntuador, conectores, fecha, args.tope)
+        md, _ = correr(
+            criterios, cv, store, puntuador, conectores, fecha, args.tope,
+            detalles=_detalles if _detalles is not None else _detalles_reales(),
+        )
         store.cerrar()
 
         destino = Path("reportes") / f"{fecha}.md"
@@ -103,7 +118,10 @@ def main(
         store = Store(args.db)
         fecha = _dt.date.today().isoformat()
         try:
-            cosecha = cosechar(criterios, store, conectores, args.tope, fecha)
+            cosecha = cosechar(
+                criterios, store, conectores, args.tope, fecha,
+                detalles=_detalles if _detalles is not None else _detalles_reales(),
+            )
         except TopeExcedido as e:
             store.cerrar()
             print(_json.dumps({"error": str(e)}, ensure_ascii=False))
