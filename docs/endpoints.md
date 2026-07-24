@@ -5,6 +5,9 @@ URL, el tipo de página (SSR vs SPA vs API), la forma de la respuesta y las
 señales necesarias para construir cada conector. Es el insumo del plan de
 conectores colombianos.
 
+**Los tres portales candidatos** (vacantes.com, occ.com.mx, jobleads.com) se sondearon
+aparte el 2026-07-24: ver **`docs/fase0-portales-nuevos.md`**.
+
 **Estado:** sondeo ejecutado con `discovery/probe.py` (curl_cffi `chrome124`) el
 2026-07-23 con el término "gerente de proyectos". Los tres portales
 respondieron **HTTP 200 sin bloqueo** — incluido Computrabajo, que con TLS de

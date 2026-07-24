@@ -50,21 +50,23 @@ volumen. Repo público `github.com/juanurreamurillo/jobwatch`.
 
 ## Next Steps
 
-1. **Sondear portales nuevos** (pedido de Juan, 2026-07-24). Seguir el runbook de
-   Fase 0 de `docs/endpoints.md`; **abrir los bundles con `jsluice`**, no solo el
-   documento. Cada uno trae una pregunta propia que conviene resolver **antes** de
-   escribir el conector:
-   - **https://vacantes.com/** — sin particularidad conocida; sondeo estándar.
-   - **https://www.occ.com.mx/** — es **mexicana**, y eso no es un conector más: hoy
-     jobwatch asume Colombia en varios sitios (`country_indeed="colombia"`, dominios
-     `co.`, `normalizar_ubicacion` con ciudades colombianas, salarios en COP). Abre
-     una **dimensión de geografía que `Criterios` no modela**.
-   - **https://www.jobleads.com/co/jobs** — es un **agregador**, no una bolsa. Dos
-     riesgos a verificar primero: (a) puede exigir registro/pago para ver la oferta
-     completa, lo que choca con "solo lo que una búsqueda pública ya muestra"
-     (`CONTRIBUTING.md`); (b) al re-publicar vacantes de otros portales, va a
-     **colisionar con el dedup** — buen caso de prueba para el fingerprint de
-     contenido, o fuente de ruido duplicado si el fingerprint no aguanta.
+1. **Decidir qué se hace con los tres portales sondeados.** El sondeo de Fase 0 ya está
+   hecho y medido: **`docs/fase0-portales-nuevos.md`**. Resumen del veredicto:
+   - **occ.com.mx — adoptar.** SSR limpio, `data-id` estable, detalle resoluble solo con
+     el id, y es el **primer portal con modalidad y recencia server-side** (`?tm=N` con
+     granularidad 0/1/2/3/7/14/30/60). Dos cosas abiertas antes de escribir el conector:
+     (a) es **mexicano** → abre la dimensión de geografía que `Criterios` no modela;
+     (b) su modalidad **solo es verificable en el detalle**, así que el patrón
+     "modalidad desde `criterios.modalidad`" de computrabajo/elempleo **no aplica** —
+     el portal inyecta anuncios `Recomendada` que ignoran los filtros.
+   - **vacantes.com — marginal, y es decisión de Juan.** Técnicamente correcto (modalidad
+     server-side real, `?page=N`), pero son **187 vacantes en todo el portal** y su
+     `robots.txt` desautoriza justo el listado con query (`Disallow: /*/vacantes/*?`),
+     que es como se busca, se filtra y se pagina. No es una decisión técnica.
+   - **jobleads.com — descartar.** Tope duro de **10 ofertas sin paginación y sin total
+     declarado** (trunca en silencio, peor que el `ai_search_jobs` que ya se rechazó),
+     sin filtro de remoto ni de recencia, y el **detalle devuelve 403 de Cloudflare**
+     incluso con `chrome124`.
 2. **Migrar a un ruff más estricto en su propio PR**, con su limpieza: 51 hallazgos
    preexistentes (BLE001 sobre los `except` genéricos que SON el patrón fail-loud,
    I001, DTZ011, S112, UP035). No colarlo de rebote en un PR de conectores.
