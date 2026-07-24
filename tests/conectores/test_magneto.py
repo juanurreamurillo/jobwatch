@@ -17,6 +17,7 @@ def test_url_ruta_termino_pagina():
 def test_rows_del_flight_extrae_vacantes():
     rows = _rows_del_flight(FIXTURE)
     assert len(rows) >= 1
+    assert len(rows) == 20
     r0 = rows[0]
     assert "publishDate" in r0 and "id" in r0 and "title" in r0
 
@@ -25,6 +26,8 @@ def test_extraer_filtra_remoto_y_puebla_fecha_iso():
     c = Criterios(terminos="gerente de proyectos", modalidad=Modalidad.REMOTO)
     vacantes, omitidas, n_crudo = _extraer(FIXTURE, c)
     assert n_crudo >= 1  # tarjetas crudas del flight
+    assert n_crudo == 20
+    assert len(vacantes) == 12
     assert all(v.modalidad is Modalidad.REMOTO for v in vacantes)  # solo remotas
     assert all(v.fecha_publicacion and v.fecha_publicacion[:2] == "20" for v in vacantes)
 
