@@ -44,3 +44,18 @@ def test_render_muestra_detalle_y_multiportal():
     assert "1 filas omitidas" in md
     assert "bloqueado: 403" in md
     assert "computrabajo, magneto" in md          # nota "vista en N portales"
+
+
+def test_reporte_marca_fecha_desconocida():
+    v = Vacante(id_nativo="1", portal="x", titulo="T", empresa="E", ubicacion="U",
+                url="http://x", fecha_publicacion=None)
+    o = OfertaPuntuada(vacante=v, estado=EstadoOferta.PUNTUADA, puntaje=80, razon="ok")
+    md = render("2026-07-23", {}, [o])
+    assert "fecha desconocida" in md
+
+
+def test_reporte_muestra_fecha_cuando_existe():
+    v = Vacante(id_nativo="1", portal="x", titulo="T", empresa="E", ubicacion="U",
+                url="http://x", fecha_publicacion="2026-07-22")
+    o = OfertaPuntuada(vacante=v, estado=EstadoOferta.PUNTUADA, puntaje=80, razon="ok")
+    assert "2026-07-22" in render("2026-07-23", {}, [o])
