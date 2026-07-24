@@ -29,28 +29,64 @@ def test_coincide_termino():
     assert coincide_termino("GESTIÓN de Proyéctos TI", "proyectos") is True
 
 
-def test_ejecutar_envuelve_exito_y_detalle():
+def _v(i):
+    return Vacante(id_nativo=str(i), portal="x", titulo=f"t{i}", empresa="e",
+                   ubicacion="u", url=f"http://x/{i}")
+
+
+def test_ejecutar_pagina_hasta_pagina_vacia():
+    paginas = {1: "p1", 2: "p2", 3: ""}  # p3 vacía = fin
+    urls = []
+    def url_fn(c, p):
+        urls.append(p)
+        return paginas.get(p, "")
     def extraer(html, c):
-        v = Vacante(id_nativo="1", portal="x", titulo="T", empresa="E",
-                    ubicacion="Bogotá", url="https://x/1")
-        return [v], 2
-    r = ejecutar(Criterios(terminos="t"), lambda c: "https://x",
-                 fetch=lambda u: "<html></html>", extraer=extraer)
-    assert r.estado is EstadoConector.OK and len(r.vacantes) == 1
-    assert "2 filas omitidas" in r.detalle
+        if not html:
+            return ([], 0, 0)           # n_crudo=0 -> parada
+        n = 1 if html == "p1" else 1
+        return ([_v(html)], 0, n)       # 1 tarjeta cruda
+    r = ejecutar(Criterios(terminos="x"), url_fn, lambda u: u, extraer)
+    assert r.estado is EstadoConector.OK
+    assert [v.titulo for v in r.vacantes] == ["tp1", "tp2"]
+    assert urls == [1, 2, 3]            # visitó hasta la vacía y paró
 
 
-def test_ejecutar_fetch_falla_es_error():
-    def boom(u):
-        raise RuntimeError("403 bloqueado")
-    r = ejecutar(Criterios(terminos="t"), lambda c: "u",
-                 fetch=boom, extraer=lambda h, c: ([], 0))
-    assert r.estado is EstadoConector.ERROR and "403 bloqueado" in r.detalle
+def test_ejecutar_para_por_crudo_no_por_filtrado():
+    # página intermedia con tarjetas crudas pero 0 vacantes filtradas NO para
+    def url_fn(c, p): return f"p{p}" if p <= 3 else ""
+    def extraer(html, c):
+        if html == "":
+            return ([], 0, 0)
+        if html == "p2":
+            return ([], 0, 20)   # 20 crudas, 0 tras filtrar
+        return ([_v(html)], 0, 20)
+    r = ejecutar(Criterios(terminos="x"), url_fn, lambda u: u, extraer)
+    assert [v.titulo for v in r.vacantes] == ["tp1", "tp3"]  # p2 no cortó
 
 
-def test_ejecutar_extraer_falla_es_error():
-    def boom(html, c):
-        raise ValueError("HTML malformado")
-    r = ejecutar(Criterios(terminos="t"), lambda c: "u",
-                 fetch=lambda u: "<html></html>", extraer=boom)
-    assert r.estado is EstadoConector.ERROR and "HTML malformado" in r.detalle
+def test_ejecutar_tope_paginas_declara_parcial():
+    def url_fn(c, p): return f"p{p}"        # nunca vacía
+    def extraer(html, c): return ([_v(html)], 0, 20)
+    r = ejecutar(Criterios(terminos="x"), url_fn, lambda u: u, extraer, max_paginas=3)
+    assert r.estado is EstadoConector.OK
+    assert "tope" in r.detalle.lower()      # cobertura parcial declarada (B2)
+
+
+def test_ejecutar_error_en_pagina1_es_error():
+    def url_fn(c, p): return f"p{p}"
+    def boom(u): raise RuntimeError("bloqueado")
+    r = ejecutar(Criterios(terminos="x"), url_fn, boom, lambda h, c: ([], 0, 0))
+    assert r.estado is EstadoConector.ERROR
+
+
+def test_ejecutar_error_tras_pagina1_es_parcial():
+    def url_fn(c, p): return f"p{p}"
+    def fetch(u):
+        if u == "p2":
+            raise RuntimeError("500")
+        return u
+    def extraer(html, c): return ([_v(html)], 0, 20)
+    r = ejecutar(Criterios(terminos="x"), url_fn, fetch, extraer)
+    assert r.estado is EstadoConector.OK
+    assert [v.titulo for v in r.vacantes] == ["tp1"]
+    assert "página 2" in r.detalle.lower() or "pagina 2" in r.detalle.lower()
