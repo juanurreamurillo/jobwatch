@@ -24,3 +24,9 @@ def test_cargar_criterios_minimo(tmp_path):
     ruta.write_text(json.dumps({"terminos": "dev"}), encoding="utf-8")
     c = cargar_criterios(str(ruta))
     assert c.terminos == "dev" and c.ubicacion is None
+
+
+def test_config_carga_dias(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"terminos": "x", "dias": 2}), encoding="utf-8")
+    assert cargar_criterios(str(p)).dias == 2

@@ -1,5 +1,7 @@
+from datetime import date
+
 from jobwatch.modelos import Criterios, Modalidad, Vacante
-from jobwatch.matcher import filtro_local
+from jobwatch.matcher import filtro_local, filtro_recencia
 
 
 def _v(**over):
@@ -33,3 +35,41 @@ def test_rechaza_por_modalidad_solo_si_conocida():
     assert filtro_local(_v(modalidad=Modalidad.PRESENCIAL), c) is False
     assert filtro_local(_v(modalidad=Modalidad.REMOTO), c) is True
     assert filtro_local(_v(modalidad=Modalidad.DESCONOCIDO), c) is True
+
+
+HOY = date(2026, 7, 23)
+
+
+def _vf(fecha):
+    return Vacante(id_nativo="1", portal="x", titulo="t", empresa="e",
+                   ubicacion="u", url="http://x", fecha_publicacion=fecha)
+
+
+def test_recencia_none_no_filtra():
+    assert filtro_recencia(_vf("2020-01-01"), None, HOY) is True
+
+
+def test_recencia_dias2_es_hoy_y_ayer():
+    assert filtro_recencia(_vf("2026-07-23"), 2, HOY) is True   # hoy
+    assert filtro_recencia(_vf("2026-07-22"), 2, HOY) is True   # ayer
+    assert filtro_recencia(_vf("2026-07-21"), 2, HOY) is False  # anteayer FUERA
+
+
+def test_recencia_no_fechable_se_incluye():
+    assert filtro_recencia(_vf(None), 2, HOY) is True
+
+
+def test_filtro_local_descarta_titulo_ajeno_al_termino():
+    """El portal degrada a resultados vagamente relacionados: pidiendo 'gerente de
+    proyectos' devuelve 'gestor comercial'. coincide_termino existía y estaba
+    testeado, pero nunca se cableó al filtro (hallazgo #2)."""
+    v = Vacante(id_nativo="1", portal="computrabajo", titulo="gestor comercial",
+                empresa="e", ubicacion="Bogotá", url="http://x/1")
+    assert filtro_local(v, Criterios(terminos="gerente de proyectos")) is False
+
+
+def test_filtro_local_conserva_titulo_que_cubre_el_termino():
+    v = Vacante(id_nativo="2", portal="computrabajo",
+                titulo="Gerente de Proyectos TI Senior",
+                empresa="e", ubicacion="Bogotá", url="http://x/2")
+    assert filtro_local(v, Criterios(terminos="gerente de proyectos")) is True

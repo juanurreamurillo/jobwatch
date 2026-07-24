@@ -64,6 +64,7 @@ class Criterios(BaseModel):
     modalidad: Modalidad | None = None
     salario_min: int | None = None
     excluir: list[str] = []
+    dias: int | None = None
 
 
 class Vacante(BaseModel):

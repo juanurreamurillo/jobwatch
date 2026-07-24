@@ -35,7 +35,13 @@ discovery = [
 ]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.5",
+    # Pineados con techo a propósito: sin él, un release aguas arriba pone el CI en
+    # rojo sobre código intacto (pasó el 2026-07-24: un ruff más nuevo levantó 51
+    # hallazgos preexistentes —BLE001 sobre los `except` genéricos que SON el patrón
+    # fail-loud de los conectores, I001, DTZ011…—). Subir el techo debe ser un cambio
+    # deliberado, con su propia limpieza, no un efecto colateral de otro PR.
+    "ruff>=0.15,<0.16",
+    "vulture>=2.11,<3",
     "build>=1.0",
     "twine>=5.0",
 ]
@@ -57,6 +63,17 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+# Detecta símbolos sin llamadores en producción. Nació de un caso real:
+# `coincide_termino` se construyó, se testeó y nunca se cableó al filtro, así que
+# el término de búsqueda no filtraba nada. Los tests no lo ven —ellos SÍ lo
+# llamaban—; solo un análisis de alcance sobre `src/` lo delata.
+[tool.vulture]
+paths = ["src"]
+min_confidence = 60
+# _computar lo invoca Pydantic vía @model_validator; SESION_EXPIRADA es parte del
+# contrato de ResultadoConector documentado en docs/design.md §67.
+ignore_names = ["_computar", "SESION_EXPIRADA"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

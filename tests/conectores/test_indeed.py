@@ -1,4 +1,4 @@
-from jobwatch.modelos import Criterios, EstadoConector
+from jobwatch.modelos import Criterios, EstadoConector, Modalidad
 from jobwatch.conectores.indeed import buscar
 
 
@@ -60,3 +60,58 @@ def test_id_nan_cae_a_job_url():
     }]
     r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF(filas))
     assert r.vacantes[0].id_nativo == "https://indeed/xyz"   # not "nan"
+
+
+def test_indeed_pasa_is_remote_y_hours_old():
+    capturado = {}
+
+    def fake_scrape(**kw):
+        capturado.update(kw)
+        return _FakeDF([])
+
+    buscar(Criterios(terminos="gerente", modalidad=Modalidad.REMOTO, dias=2),
+           scrape=fake_scrape)
+    assert capturado.get("is_remote") is True
+    assert capturado.get("hours_old") == 48    # 24 * dias
+
+
+def test_indeed_sin_dias_no_manda_hours_old():
+    capturado = {}
+
+    def fake_scrape(**kw):
+        capturado.update(kw)
+        return _FakeDF([])
+
+    buscar(Criterios(terminos="gerente"), scrape=fake_scrape)
+    assert capturado.get("hours_old") is None
+    assert capturado.get("is_remote") is False
+
+
+def test_indeed_puebla_fecha_desde_date_posted():
+    fila = {"id": "1", "title": "t", "company": "e", "location": "Bogotá",
+            "job_url": "http://x/1", "date_posted": "2026-07-21", "is_remote": True}
+    r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF([fila]))
+    assert r.vacantes[0].fecha_publicacion == "2026-07-21"
+
+
+def test_is_remote_false_es_presencial_no_desconocido():
+    """JobSpy devuelve bool real: False significa 'no es remoto', no 'no sé'.
+    Colapsarlo en DESCONOCIDO hace que filtro_local lo deje pasar (hallazgo #3)."""
+    filas = [{
+        "id": "b1", "title": "Gestor de clientes banca minorista", "company": "BBVA",
+        "location": "Pitalito", "job_url": "https://indeed/b1",
+        "is_remote": False, "description": "…", "date_posted": "2026-07-23",
+    }]
+    r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF(filas))
+    assert r.vacantes[0].modalidad is Modalidad.PRESENCIAL
+
+
+def test_is_remote_ausente_sigue_siendo_desconocido():
+    """Ausente/NaN sí es genuinamente desconocido: no inventamos modalidad."""
+    filas = [{
+        "id": "b2", "title": "Coordinador", "company": "ACME",
+        "location": "Bogotá", "job_url": "https://indeed/b2",
+        "description": "…", "date_posted": "2026-07-23",
+    }]
+    r = buscar(Criterios(terminos="x"), scrape=lambda **kw: _FakeDF(filas))
+    assert r.vacantes[0].modalidad is Modalidad.DESCONOCIDO

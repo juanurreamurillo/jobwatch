@@ -50,3 +50,11 @@ htmlcov/
 # --- OS -------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+
+# Artefactos de corrida de la skill (repo público: nunca commitear)
+candidatas.json
+scores.json
+jobwatch.config.json
+
+# Índice local de codegraph
+.codegraph/

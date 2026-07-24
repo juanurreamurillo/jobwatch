@@ -1,6 +1,6 @@
 from jobwatch.modelos import (
     Vacante, Modalidad, EstadoConector, ResultadoConector,
-    calcular_id_estable, calcular_fingerprint,
+    calcular_id_estable, calcular_fingerprint, Criterios,
 )
 
 
@@ -72,3 +72,11 @@ def test_lote_puntajes_estado_enum():
     ])
     assert lote.puntajes[0].puntaje == 80
     assert lote.puntajes[1].puntaje is None
+
+
+def test_criterios_dias_default_none():
+    assert Criterios(terminos="x").dias is None
+
+
+def test_criterios_dias_se_asigna():
+    assert Criterios(terminos="x", dias=2).dias == 2

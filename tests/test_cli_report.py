@@ -58,7 +58,8 @@ def test_run_con_config_y_conectores_inyectados(tmp_path, monkeypatch):
     conectores = {"computrabajo": lambda c: ResultadoConector(estado=EstadoConector.OK, vacantes=[v])}
     rc = main(
         ["run", "--config", str(cfg), "--cv", str(cv), "--db", str(tmp_path / "j.db")],
-        _conectores=conectores, _puntuador=lambda vac, cv: {"puntaje": 91, "razon": "ok"},
+        _conectores=conectores, _detalles={},
+        _puntuador=lambda vac, cv: {"puntaje": 91, "razon": "ok"},
     )
     assert rc == 0
     assert (tmp_path / "reportes").exists()

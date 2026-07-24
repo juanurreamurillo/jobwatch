@@ -70,6 +70,150 @@ elempleo y Magneto además traen un `ItemList` con título + URL de detalle.
     `/co/empleos/{slug}-{id}` (no `/co/trabajos/…`).
   - título / empresa / salario / ubicación: del card en el DOM (o del slug para el
     título) — selectores a fijar en el conector.
+- **Detalle `/co/empleos/{slug}-{id}` (investigado 2026-07-24):** 200, 846 KB, SSR.
+  - ⚠️ **Corrección.** Un primer barrido estático (documento + flight, sin abrir los
+    bundles) concluyó "cero rutas `/api/`". **Es falso.** Con DevTools contra el
+    runtime aparecen llamadas a **`api.magneto365.com`**; la URL base se arma en los
+    chunks `_next/static/chunks/*.js`, que el barrido no leyó. Lección de método: un
+    escaneo estático que no incluye los bundles no puede afirmar ausencia de API.
+  - **Ninguna de esas llamadas trae datos de vacantes.** Verificado en la página de
+    detalle y en la de resultados: son `sign-up/v1/countries/active`,
+    `jobs/v1/public/locations`, `seo/v1/mega-menu/*`,
+    `sign-up/v2/candidate/applications/count` (401) y
+    `jobs/v1/vacancies/ia/suggested?id={id}` (401). Las vacantes siguen llegando con
+    el documento SSR.
+  - **Almacenamiento local:** `localStorage`, `sessionStorage`, cookies e IndexedDB
+    contienen **solo tracking** (Amplitude, Clarity, Snapchat, TikTok, Pinterest,
+    Google, Meta). IndexedDB: únicamente `AMP_diagnostics`. **Cero datos de vacantes
+    cacheados** — no hay nada que aprovechar desde ahí.
+  - **La descripción vive en `<script type="application/ld+json">` con
+    `@type: "JobPosting"`** (schema.org). La página trae 3 bloques ld+json —
+    `JobPosting`, `BreadcrumbList` y `LocalBusiness`— así que hay que filtrar por
+    `@type`. Campos útiles: `description` (~3,2 K caracteres, HTML plano),
+    `datePosted`, `baseSalary`, `employmentType`, `hiringOrganization`,
+    `jobLocation`, `industry`, `qualifications`, `validThrough`.
+  - **Contraste con el listado:** el listado obliga a reconstruir el flight RSC
+    (`self.__next_f.push`); el detalle **no** — el JSON-LD está en el DOM directamente.
+    Por eso `extraer_detalle` no comparte código con `_rows_del_flight`.
+  - ⚠️ `baseSalary.value.unitText` viene como `"HOUR"` con `minValue: 10600000`, que es
+    un salario **mensual** en COP. El dato del portal es incorrecto; no confiar en
+    `unitText`.
+
+### Servidor MCP oficial de Magneto (hallazgo del 2026-07-24)
+
+`https://api.magneto365.com/agents/v1/mcp` — **"Magneto MCP Server" v1.1.2**, JSON-RPC
+2.0, `initialize` responde **sin autenticación** y sin `Mcp-Session-Id`. Es la interfaz
+que el propio portal expone para agentes.
+
+| Tool | Params | Comportamiento observado |
+|---|---|---|
+| `get_job_detail` | `jobSlug` | **0,2 s / 4,3 KB** (vs 846 KB y timeouts de 30 s vía HTML). Devuelve `structuredContent.job` con `id`, `slug`, `title`, `company`, `location`, `salary`, `description`, **`modality`**, `sectors`, `experienceMonthsNumber`, `educationLevel`, `publicationDate`, `contractType`, `url`. |
+| `ai_search_jobs` | `query` (lenguaje natural) | 1,9 s. Devuelve `{results, total, searchUrl}` con los mismos campos por vacante. |
+| `get_filters` | — | Catálogo de filtros (ubicaciones, categorías, modalidades, experiencia, salario, contrato). |
+
+**`ai_search_jobs` — caracterizado con 3 consultas + prueba de repetición:**
+
+- ✅ **Determinista.** Dos llamadas idénticas devuelven los mismos ids, en el mismo orden.
+- ✅ **Respeta la modalidad** expresada en lenguaje natural ("presencial" → todo Presencial).
+- ❌ **Ignora la recencia.** Las consultas *con* y *sin* "publicado en los últimos 2 días"
+  devolvieron **resultados idénticos**, incluyendo una vacante de abril. Comprobado por
+  comparación directa, no inferido.
+- ❌ **Trunca en silencio.** Reporta `total=23` y devuelve 10; `total=4` y devuelve 2.
+  Para un cosechador esto es descalificante: perdería vacantes sin declararlo, que es
+  justo lo que prohíbe el principio fail-loud (D4/B2).
+- Su `searchUrl` lleva `utm_source=openai&utm_medium=mcp`: el servidor está pensado
+  para agentes tipo OpenAI.
+
+**`get_filters` — vocabulario canónico del portal** (útil como referencia, no como
+dependencia en runtime):
+
+- `modalities`: `remote` / `hybrid` / `onSite` — mapea 1:1 con `Modalidad`.
+- `publishDate`: **ventanas discretas** `Hoy` / `Últimos 3 días` / `Última semana` /
+  `Últimos 15 días` / `Último mes` (`BK-01`…`BK-05`). **No existe "2 días"**: mismo
+  patrón que el `pubdate=[1,3,7,15]` de Computrabajo, así que `dias=2` cae en `BK-02`
+  y el recorte fino lo hace `filtro_recencia` (D22). Confirma el diseño actual.
+- `categories` (34): id **23** = "Software, informática y telecomunicaciones",
+  **28** = "Dirección y Gerencia", **14** = "Ingenierías".
+- `experienceMonths` (`BK-01`…`BK-08`), `salaryRanges` (`BK-01`…`BK-08`),
+  `contractTypes` (1–6, 153; **5** = "Prestación de servicios").
+
+**Protocolo, medido:** `tools/call` responde **sin `initialize` previo** y sin
+`Mcp-Session-Id` — un único POST JSON-RPC basta. 5 llamadas seguidas: 0,19–0,22 s,
+todas 200. No hace falta cliente MCP ni dependencia nueva: `curl_cffi` ya está.
+
+**Veredicto:** adoptar `get_job_detail`; **no** adoptar `ai_search_jobs` como fuente del
+listado. El listado debe seguir saliendo del flight RSC, que sí controlamos.
+
+**Decisión sobre términos de uso (aprobada por el responsable del repo, 2026-07-24):**
+se adopta `get_job_detail`. Razones registradas: el endpoint es **público y sin
+autenticación**, el portal lo publica **explícitamente para agentes** (su propio
+`searchUrl` devuelve `utm_source=openai&utm_medium=mcp`), y usarlo **reduce** la carga
+sobre Magneto en vez de aumentarla — 4 KB por oferta frente a 846 KB de la página SSR.
+Es la opción más respetuosa disponible, no un atajo. Se mantiene el extractor JSON-LD
+como respaldo, de modo que jobwatch no queda cautivo del servicio.
+
+### Fiabilidad del listado de Magneto (medido 2026-07-24)
+
+Causa raíz del `error`/`cobertura parcial` que aparece en casi toda corrida:
+
+- **Latencia de cola errática, en cualquier página. No hay muro por profundidad.**
+  Una primera medición con el término `gerente-de-proyectos` sugería un muro fijo en la
+  página 4 (p1-p3 en <2 s, p4-p6 en timeout de 45 s, reproducible incluso como primera
+  petición de una sesión nueva). **Contrastado con más términos, la hipótesis cae:**
+
+  | término | p1 | p3 | p4 |
+  |---|---|---|---|
+  | `desarrollador` | 1,2 s | 19,8 s | **1,5 s** |
+  | `contador` | 1,0 s | **timeout** | 3,8 s |
+  | `inteligencia-artificial` | 0,8 s | **timeout** | **timeout** |
+
+  Cualquier página puede tardar >35 s, y la misma página puede responder rápido al
+  reintentarla. **Un tope fijo de páginas no arregla nada**; lo que corresponde es
+  reintentar.
+- **Consecuencia grave del fallo en la página 1.** Un error en la primera página tumba
+  el conector entero (`ERROR`, por diseño en `ejecutar`). Así se perdió la única vacante
+  real de la búsqueda `ingeniero-inteligencia-artificial`, cuyo p1 responde en 0,8 s al
+  reintentarlo.
+- **Los filtros por query string se ignoran.** `?modality=remote`, `?modalities=`,
+  `?workModality=`, `?publishDate=BK-02` y su combinación devuelven byte por byte lo
+  mismo que sin filtro (836 KB, 20 filas, 13 remotas). **No hay filtrado en servidor**:
+  el filtro remoto local del conector es correcto e inevitable.
+
+---
+
+## Herramientas de Fase 0 — instalación real (verificado 2026-07-24)
+
+El README las nombra como si las tres se instalaran igual. **No es así.**
+
+```bash
+# mitmproxy2swagger — extra del propio proyecto
+pip install -e ".[discovery]"          # trae mitmproxy 12.2.3 + mitmproxy2swagger 0.15.0
+                                       # ⚠️ fija pydantic 2.11.10; correr la suite después
+
+# curlconverter — npm, trivial
+npm i -g curlconverter                 # 4.12.0
+
+# jsluice — NO tiene binarios precompilados (cero releases, cero tags en GitHub);
+# hay que compilarlo, y necesita Go, que no viene con WSL.
+curl -sL -o /tmp/go.tgz "https://go.dev/dl/$(curl -s https://go.dev/VERSION?m=text | head -1).linux-amd64.tar.gz"
+tar -C ~/.local -xzf /tmp/go.tgz       # sin sudo: queda en ~/.local/go
+PATH="$HOME/.local/go/bin:$PATH" go install github.com/BishopFox/jsluice/cmd/jsluice@latest
+~/go/bin/jsluice urls chunks/*.js      # el binario queda en ~/go/bin
+```
+
+**Qué aporta cada una, medido y no supuesto:**
+
+- **`jsluice urls`** sobre los 45 chunks de magneto: 520 URLs, y para la API los
+  **mismos namespaces** que un barrido a mano (`jobs`, `sign-up`, `seo`, `referrals`,
+  `growth`, `notification-manager`, `oauth2`). No sacó rutas más específicas porque se
+  construyen en runtime. Su valor real: **lee los bundles por defecto**, que es
+  exactamente el paso omitido que produjo la conclusión falsa de "cero rutas `/api/`".
+- **`curlconverter`** traduce `curl` a Python/otros lenguajes. No descubre nada; sirve
+  para pasar una petición capturada en DevTools a código del conector sin transcribir
+  headers a mano.
+- **`mitmproxy2swagger`** necesita un `.har` o un dump de flujos. Para magneto **no
+  aplica**: no hay API de vacantes que documentar. Su sitio es Computrabajo bajo
+  Turnstile, donde `curl_cffi` no basta.
 
 ---
 

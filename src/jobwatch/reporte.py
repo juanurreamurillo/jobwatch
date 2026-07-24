@@ -28,6 +28,7 @@ def render(
     for o in sorted(ofertas, key=_orden):
         v = o.vacante
         puntaje = o.puntaje if o.estado is EstadoOferta.PUNTUADA else "—"
+        fecha_txt = v.fecha_publicacion or "fecha desconocida"
         multi = ""
         if len(v.portales) > 1:
             multi = f"\n- Vista en {len(v.portales)} portales: {', '.join(v.portales)}"
@@ -35,6 +36,7 @@ def render(
             f"### [{v.titulo}]({v.url}) · {puntaje}\n"
             f"- Empresa: {v.empresa}\n"
             f"- Ubicación: {v.ubicacion}\n"
+            f"- Publicada: {fecha_txt}\n"
             f"- Motivo: {o.razon}{multi}\n"
         )
     return "\n".join(lineas)
