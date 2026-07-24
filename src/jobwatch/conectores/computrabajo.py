@@ -5,14 +5,35 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from jobwatch.conectores._comun import ejecutar, slug, texto
-from jobwatch.modelos import Criterios, ResultadoConector, Vacante
+from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
 from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 HOST = "https://co.computrabajo.com"
 
+_PUBDATE = [1, 3, 7, 15]  # ventanas server discretas (descubrimiento)
 
-def _url(criterios: Criterios) -> str:
-    return f"{HOST}/trabajo-de-{slug(criterios.terminos)}"
+
+def _pubdate_para(dias: int | None) -> int | None:
+    if dias is None:
+        return None
+    for v in _PUBDATE:
+        if v >= dias:
+            return v
+    return _PUBDATE[-1]
+
+
+def _url(criterios: Criterios, pagina: int = 1) -> str:
+    ruta = f"/trabajo-de-{slug(criterios.terminos)}"
+    if criterios.modalidad is Modalidad.REMOTO:
+        ruta += "-en-remoto"
+    params = []
+    pd = _pubdate_para(criterios.dias)
+    if pd is not None:
+        params += [f"pubdate={pd}", "by=publicationtime"]
+    if pagina > 1:
+        params.append(f"p={pagina}")
+    qs = ("?" + "&".join(params)) if params else ""
+    return f"{HOST}{ruta}{qs}"
 
 
 def _a_vacante(art) -> Vacante:
@@ -24,24 +45,30 @@ def _a_vacante(art) -> Vacante:
     if art.select_one("span.i_salary"):
         salario_raw = texto(art.select_one("div.fs13.mt15 span.dIB.mr10"))
     smin, smax = parsear_salario(salario_raw) if salario_raw else (None, None)
+    fecha_el = art.select_one("p.fs13.fc_aux")
+    fecha_raw = texto(fecha_el) or None  # texto relativo crudo; el core lo normaliza (D22)
+    modalidad = Modalidad.REMOTO if "-en-remoto" in href or "remoto" in texto(art).lower() else Modalidad.DESCONOCIDO
     return Vacante(
         id_nativo=art.get("data-id", ""),
         portal="computrabajo",
         titulo=texto(a),
         empresa=texto(empresa),
         ubicacion=normalizar_ubicacion(texto(ubic)),
+        modalidad=modalidad,
         salario_raw=salario_raw,
         salario_min=smin,
         salario_max=smax,
         url=urljoin(HOST, href),
+        fecha_publicacion=fecha_raw,
     )
 
 
-def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
+def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
     sopa = BeautifulSoup(html, "lxml")
+    arts = sopa.select("article.box_offer")
     vacantes: list[Vacante] = []
     omitidas = 0
-    for art in sopa.select("article.box_offer"):
+    for art in arts:
         try:
             v = _a_vacante(art)
             if not v.id_nativo or not v.titulo:
@@ -50,8 +77,8 @@ def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
             vacantes.append(v)
         except Exception:
             omitidas += 1
-    return vacantes, omitidas
+    return vacantes, omitidas, len(arts)  # n_crudo = tarjetas crudas
 
 
 def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    return ejecutar(criterios, _url, fetch, _extraer)
+    return ejecutar(criterios, _url, fetch, _extraer, pausa=1.0)

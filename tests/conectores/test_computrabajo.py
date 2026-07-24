@@ -1,13 +1,15 @@
 from pathlib import Path
 
-from jobwatch.conectores.computrabajo import buscar
-from jobwatch.modelos import Criterios, EstadoConector
+from jobwatch.conectores.computrabajo import _extraer, _url, buscar
+from jobwatch.modelos import Criterios, EstadoConector, Modalidad
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "computrabajo.html").read_text(encoding="utf-8")
 
 
 def _fetch_ok(url):
-    return FIXTURE
+    # página 1 trae el fixture (2 ofertas); página 2 en adelante "agotada" (0
+    # tarjetas crudas) para que la paginación (D17/B1) no reintente indefinidamente.
+    return "" if "p=2" in url else FIXTURE
 
 
 def test_parsea_dos_ofertas_del_fixture():
@@ -38,3 +40,25 @@ def test_fetch_falla_es_error_fail_loud():
         raise RuntimeError("403 bloqueado")
     r = buscar(Criterios(terminos="x"), fetch=explota)
     assert r.estado is EstadoConector.ERROR and "403 bloqueado" in r.detalle
+
+
+def test_url_remoto_pubdate_paginado():
+    c = Criterios(terminos="gerente de proyectos", modalidad=Modalidad.REMOTO, dias=2)
+    u = _url(c, 2)
+    assert "/trabajo-de-gerente-de-proyectos-en-remoto" in u
+    assert "pubdate=3" in u          # menor de {1,3,7,15} >= 2
+    assert "by=publicationtime" in u
+    assert "p=2" in u
+
+
+def test_url_sin_modalidad_ni_dias():
+    u = _url(Criterios(terminos="gerente"), 1)
+    assert u.endswith("/trabajo-de-gerente")   # sin -en-remoto, sin params, p=1 implícito/omitido
+
+
+def test_extraer_puebla_fecha_cruda_y_ncrudo():
+    vacantes, omitidas, n_crudo = _extraer(FIXTURE, Criterios(terminos="gerente"))
+    assert n_crudo >= 1
+    assert len(vacantes) >= 1
+    # al menos una con la fecha CRUDA poblada (texto relativo; el core la normaliza)
+    assert any(v.fecha_publicacion for v in vacantes)
