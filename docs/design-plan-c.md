@@ -41,9 +41,10 @@ publicadas ayer–hoy"**.
 - `Criterios.dias: int | None = None` — ventana de recencia en días.
 - `Criterios.modalidad: Modalidad | None` **ya existe**; Plan C la **cablea** a la
   URL de cada conector HTTP (hoy se ignora).
-- `Vacante.fecha_publicacion: str | None` **ya existe**; Plan C la **puebla** con
-  fecha ISO (`YYYY-MM-DD`) cuando es fechable, o `None` cuando no lo es (marcada
-  "fecha desconocida" en el reporte). Ver D19.
+- `Vacante.fecha_publicacion: str | None` **ya existe**; el conector la **puebla con
+  la fecha cruda** que scrapeó (texto relativo en CT/elempleo; ISO en Magneto/Indeed).
+  El core la **normaliza a ISO** (`YYYY-MM-DD`, o `None` si no es fechable) con `hoy`
+  inyectado, antes de filtrar (D22). No fechable → marcada "fecha desconocida" (D19).
 - **Fecha de referencia (`hoy`):** el filtro de recencia y el parser NO leen reloj;
   `hoy` se inyecta desde el core (D22 fija el seam). No se añade `hoy` a `Criterios`
   ni al contrato del conector — el conector queda agnóstico de fecha para filtrar.
@@ -217,17 +218,19 @@ Formato §5d: (a) mínimo esfuerzo, (b) correcta, (c) elegida + por qué, (d) de
 - (d) `hours_old` sobre-trae un poco (rodante) y el central recorta. **A 10×:**
   irrelevante; JobSpy pagina/filtra internamente.
 
-**D22 — Dónde vive el filtro de recencia (el seam de `hoy`).**
-- Flujo: los conectores pueblan `fecha_publicacion` sin filtrar → `cosechar` (core,
-  que ya recibe `fecha` de la corrida) aplica el recorte con `hoy = fecha` sobre las
-  candidatas consolidadas, ANTES del dedup/puntuación.
-- (a) Fácil-equivocada: filtrar recencia dentro de cada `_extraer`. Duplica el filtro
-  ×3–4, necesita colar `hoy` al conector (rompe el contrato agnóstico de fecha), y
-  **reintroduce B1** (mezcla filtro de fecha con la parada de paginación).
-- (b) Correcta: un único filtro en el core, con `hoy` inyectado desde `fecha`.
+**D22 — Dónde viven la normalización y el filtro de recencia (el seam de `hoy`).**
+- Flujo: los conectores pueblan `fecha_publicacion` con la fecha **cruda** (sin leer
+  reloj, sin filtrar) → `cosechar` (core, que ya recibe `fecha`) **normaliza** cada
+  cruda a ISO con `hoy = fecha` y luego aplica el recorte, ANTES del dedup/puntuación.
+- (a) Fácil-equivocada: parsear+filtrar la fecha dentro de cada `_extraer`, leyendo el
+  reloj (`date.today()`) para el ISO. Duplica ×3–4, hace el conector **no
+  determinista** (viola §4), necesita colar `hoy` al conector, y **reintroduce B1**
+  (mezcla fecha con la parada de paginación).
+- (b) Correcta: el conector solo scrapea texto crudo; un único punto en el core
+  normaliza+filtra con `hoy` inyectado desde `fecha`.
 - (c) **Elegida: central en `cosechar`.** Un solo dueño de la semántica de `dias`
-  (uniforme, D16); conectores agnósticos de fecha (parada por n_crudo, D17); tests
-  deterministas por inyección de `hoy`.
+  (uniforme, D16); conectores **agnósticos de fecha y sin reloj** → deterministas
+  (cierra S2); parada por n_crudo (D17).
 - (d) Recorta antes del dedup para no gastar dedup/puntuación en viejas. **A 10×:**
   el filtro es O(candidatas) en memoria, trivial frente al costo de red/LLM.
 

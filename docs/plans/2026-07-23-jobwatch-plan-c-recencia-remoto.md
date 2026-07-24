@@ -161,25 +161,47 @@ git commit -m "feat: Criterios.dias (ventana de recencia, Plan C)"
 
 ---
 
-### Task 3: Filtro de recencia central + cableado en `cosechar` (D22)
+### Task 3: Normalización + filtro de recencia central en `cosechar` (D22)
 
 **Files:**
-- Modify: `src/jobwatch/matcher.py`
+- Modify: `src/jobwatch/normalizar.py` (normalizador de fecha)
+- Modify: `src/jobwatch/matcher.py` (filtro de recencia)
 - Modify: `src/jobwatch/nucleo.py:55-88` (`cosechar`)
-- Test: `tests/test_matcher_filtro.py`, `tests/test_nucleo.py`
+- Test: `tests/test_normalizar.py`, `tests/test_matcher_filtro.py`, `tests/test_nucleo.py`
 
 **Interfaces:**
-- Produces: `matcher.filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool`
-- Consumes: `parsear_fecha_relativa` (no; el conector ya pobló `fecha_publicacion` ISO); `Vacante.fecha_publicacion: str | None`.
+- Produces: `normalizar.normalizar_fecha_publicacion(raw: str | None, hoy: date) -> str | None` (ISO `YYYY-MM-DD` o None); `matcher.filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool`
+- Consumes: `parsear_fecha_relativa` (Task 1); `Vacante.fecha_publicacion: str | None` (los conectores la pueblan con la fecha **cruda** scrapeada — texto relativo o ISO; ver Tasks 5–8).
+
+> **Diseño (D22, resuelve S2 sin reloj en el conector):** el conector guarda la fecha
+> **cruda** que scrapeó (relativa "Hace 2 días" en CT/elempleo; ISO en Magneto/Indeed).
+> El core, que ya tiene la fecha de corrida (`fecha`), la **normaliza a ISO** con `hoy`
+> inyectado antes de filtrar. Ningún conector lee el reloj → deterministas.
 
 - [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_normalizar.py  (añadir)
+from datetime import date
+from jobwatch.normalizar import normalizar_fecha_publicacion
+HOY2 = date(2026, 7, 23)
+
+def test_normaliza_relativa_a_iso():
+    assert normalizar_fecha_publicacion("Hace 2 días", HOY2) == "2026-07-21"
+
+def test_normaliza_iso_pasa_igual():
+    assert normalizar_fecha_publicacion("2026-07-21T12:00:00.000Z", HOY2) == "2026-07-21"
+
+def test_normaliza_none_y_no_fechable():
+    assert normalizar_fecha_publicacion(None, HOY2) is None
+    assert normalizar_fecha_publicacion("cualquier cosa", HOY2) is None
+```
 
 ```python
 # tests/test_matcher_filtro.py  (añadir)
 from datetime import date
 from jobwatch.matcher import filtro_recencia
 from jobwatch.modelos import Vacante
-
 HOY = date(2026, 7, 23)
 
 def _v(fecha):
@@ -200,10 +222,25 @@ def test_recencia_no_fechable_se_incluye():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/pytest tests/test_matcher_filtro.py -k recencia -v`
-Expected: FAIL con `ImportError` (`filtro_recencia`).
+Run: `.venv/bin/pytest tests/test_normalizar.py tests/test_matcher_filtro.py -k "normaliza or recencia" -v`
+Expected: FAIL con `ImportError` (`normalizar_fecha_publicacion`, `filtro_recencia`).
 
 - [ ] **Step 3: Write minimal implementation**
+
+```python
+# src/jobwatch/normalizar.py  (añadir; date ya importado en Task 1)
+def normalizar_fecha_publicacion(raw: str | None, hoy: date) -> str | None:
+    """Fecha cruda scrapeada (ISO o texto relativo) -> ISO 'YYYY-MM-DD' o None.
+    `hoy` inyectado (determinista). Central (D22): el conector no lee reloj."""
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10]).isoformat()  # ya venía ISO
+    except ValueError:
+        pass
+    f = parsear_fecha_relativa(raw, hoy)
+    return f.isoformat() if f else None
+```
 
 ```python
 # src/jobwatch/matcher.py  (añadir imports + función)
@@ -211,7 +248,8 @@ from datetime import date
 
 def filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool:
     """Recorte de recencia central (D22). Conserva no-fechables (D19). `dias=None`
-    = sin filtro. Predicado exacto (D16): datable pasa si (hoy - fecha).days < dias."""
+    = sin filtro. Predicado exacto (D16): datable pasa si (hoy - fecha).days < dias.
+    Asume fecha_publicacion ya normalizada a ISO por cosechar."""
     if dias is None:
         return True
     if not v.fecha_publicacion:
@@ -219,7 +257,7 @@ def filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool:
     try:
         f = date.fromisoformat(v.fecha_publicacion[:10])
     except ValueError:
-        return True  # ilegible -> tratar como no fechable
+        return True
     return (hoy - f).days < dias
 ```
 
@@ -228,8 +266,11 @@ def filtro_recencia(v: Vacante, dias: int | None, hoy: date) -> bool:
 # 1) imports:
 from datetime import date
 from jobwatch.matcher import filtro_local, filtro_recencia
-# 2) en cosechar, tras el bucle de conectores, cambiar el filtro:
+from jobwatch.normalizar import normalizar_fecha_publicacion
+# 2) en cosechar, tras el bucle de conectores y ANTES del filtro:
     hoy = date.fromisoformat(fecha)
+    for v in cosechadas:
+        v.fecha_publicacion = normalizar_fecha_publicacion(v.fecha_publicacion, hoy)
     nuevas = [
         v for v in colapsar_lote(cosechadas)
         if store.es_nueva(v)
@@ -240,14 +281,14 @@ from jobwatch.matcher import filtro_local, filtro_recencia
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/pytest tests/test_matcher_filtro.py tests/test_nucleo.py -q`
-Expected: PASS (incluye los nuevos + los previos de nucleo sin romper).
+Run: `.venv/bin/pytest tests/test_normalizar.py tests/test_matcher_filtro.py tests/test_nucleo.py -q`
+Expected: PASS (nuevos + previos de nucleo sin romper).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/jobwatch/matcher.py src/jobwatch/nucleo.py tests/test_matcher_filtro.py
-git commit -m "feat: filtro_recencia central en cosechar con hoy inyectado (Plan C D22/D16)"
+git add src/jobwatch/normalizar.py src/jobwatch/matcher.py src/jobwatch/nucleo.py tests/test_normalizar.py tests/test_matcher_filtro.py
+git commit -m "feat: normalización + filtro de recencia central en cosechar (Plan C D22/D16/S2)"
 ```
 
 ---
@@ -416,13 +457,13 @@ def test_url_sin_modalidad_ni_dias():
 from jobwatch.conectores.computrabajo import _extraer
 from datetime import date
 
-def test_extraer_puebla_fecha_y_ncrudo():
+def test_extraer_puebla_fecha_cruda_y_ncrudo():
     html = open("tests/conectores/fixtures/computrabajo.html", encoding="utf-8").read()
     vacantes, omitidas, n_crudo = _extraer(html, Criterios(terminos="gerente"))
     assert n_crudo >= 1
     assert len(vacantes) >= 1
-    # al menos una con fecha ISO poblada (parseada del texto relativo)
-    assert any(v.fecha_publicacion and len(v.fecha_publicacion) == 10 for v in vacantes)
+    # al menos una con la fecha CRUDA poblada (texto relativo; el core la normaliza)
+    assert any(v.fecha_publicacion for v in vacantes)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -434,10 +475,9 @@ Expected: FAIL (`_url` no acepta `pagina`; `_extraer` devuelve 2-tupla; fecha no
 
 ```python
 # src/jobwatch/conectores/computrabajo.py  (reemplazar _url, _a_vacante, _extraer, buscar)
-from datetime import date
 from jobwatch.conectores._comun import ejecutar, slug, texto
 from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
-from jobwatch.normalizar import normalizar_ubicacion, parsear_salario, parsear_fecha_relativa
+from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 _PUBDATE = [1, 3, 7, 15]  # ventanas server discretas (descubrimiento)
 
@@ -472,7 +512,7 @@ def _a_vacante(art) -> Vacante:
         salario_raw = texto(art.select_one("div.fs13.mt15 span.dIB.mr10"))
     smin, smax = parsear_salario(salario_raw) if salario_raw else (None, None)
     fecha_el = art.select_one("p.fs13.fc_aux")
-    f = parsear_fecha_relativa(texto(fecha_el), date.today()) if fecha_el else None
+    fecha_raw = texto(fecha_el) or None  # texto relativo crudo; el core lo normaliza (D22)
     modalidad = Modalidad.REMOTO if "-en-remoto" in href or "remoto" in texto(art).lower() else Modalidad.DESCONOCIDO
     return Vacante(
         id_nativo=art.get("data-id", ""), portal="computrabajo",
@@ -481,7 +521,7 @@ def _a_vacante(art) -> Vacante:
         modalidad=modalidad,
         salario_raw=salario_raw, salario_min=smin, salario_max=smax,
         url=urljoin(HOST, href),
-        fecha_publicacion=f.isoformat() if f else None,
+        fecha_publicacion=fecha_raw,
     )
 
 def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
@@ -556,9 +596,8 @@ Expected: FAIL (`_url` sin `pagina`, `_extraer` 2-tupla, sin fecha).
 
 ```python
 # src/jobwatch/conectores/elempleo.py  (reemplazar _url, _extraer, buscar; añadir fecha por card)
-from datetime import date
 from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
-from jobwatch.normalizar import normalizar_ubicacion, parsear_salario, parsear_fecha_relativa
+from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
 
 def _url(criterios: Criterios, pagina: int = 1) -> str:
     ruta = f"/co/ofertas-empleo/trabajo-{slug(criterios.terminos)}"
@@ -596,7 +635,7 @@ def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
         try:
             salario_raw = str(card.get("salary", "") or "")
             smin, smax = parsear_salario(salario_raw)
-            f = parsear_fecha_relativa(fechas.get(it["id"], ""), date.today())
+            fecha_raw = fechas.get(it["id"]) or None  # texto relativo crudo; core normaliza
             vacantes.append(Vacante(
                 id_nativo=it["id"], portal="elempleo",
                 titulo=str(card.get("title") or it["name"]),
@@ -604,7 +643,7 @@ def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
                 ubicacion=normalizar_ubicacion(str(card.get("location", ""))),
                 modalidad=Modalidad.REMOTO if criterios.modalidad is Modalidad.REMOTO else Modalidad.DESCONOCIDO,
                 salario_raw=salario_raw, salario_min=smin, salario_max=smax,
-                url=it["url"], fecha_publicacion=f.isoformat() if f else None,
+                url=it["url"], fecha_publicacion=fecha_raw,
             ))
         except Exception:
             omitidas += 1
