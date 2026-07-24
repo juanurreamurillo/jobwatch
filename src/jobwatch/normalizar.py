@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 
 from jobwatch.modelos import Modalidad
 
@@ -43,3 +44,28 @@ def parsear_salario(s: str) -> tuple[int | None, int | None]:
     if len(valores) == 1:
         return (valores[0], valores[0])
     return (min(valores), max(valores))
+
+
+_UNIDAD_DIAS = {"hora": 0, "minuto": 0, "segundo": 0, "dia": 1, "día": 1,
+                "semana": 7, "mes": 30, "año": 365, "ano": 365}
+
+
+def parsear_fecha_relativa(texto: str, hoy: date) -> date | None:
+    """Best-effort (D19): 'Hoy'/'Ayer'/'Hace N horas|días|semanas|meses' -> date.
+    No fechable -> None. `hoy` se inyecta (tests deterministas)."""
+    t = texto.strip().lower()
+    if not t:
+        return None
+    if t.startswith("hoy"):
+        return hoy
+    if t.startswith("ayer"):
+        return hoy - timedelta(days=1)
+    m = re.search(r"hace\s+(\d+)\s+(hora|minuto|segundo|d[ií]a|semana|mes|a[nñ]o)", t)
+    if not m:
+        return None
+    n = int(m.group(1))
+    unidad = m.group(2)
+    factor = _UNIDAD_DIAS.get(unidad)
+    if factor is None:
+        return None
+    return hoy - timedelta(days=n * factor)
