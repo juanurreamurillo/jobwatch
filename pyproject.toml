@@ -35,8 +35,13 @@ discovery = [
 ]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.5",
-    "vulture>=2.11",
+    # Pineados con techo a propósito: sin él, un release aguas arriba pone el CI en
+    # rojo sobre código intacto (pasó el 2026-07-24: un ruff más nuevo levantó 51
+    # hallazgos preexistentes —BLE001 sobre los `except` genéricos que SON el patrón
+    # fail-loud de los conectores, I001, DTZ011…—). Subir el techo debe ser un cambio
+    # deliberado, con su propia limpieza, no un efecto colateral de otro PR.
+    "ruff>=0.15,<0.16",
+    "vulture>=2.11,<3",
     "build>=1.0",
     "twine>=5.0",
 ]
