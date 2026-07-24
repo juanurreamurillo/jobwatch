@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # requires-python = ">=3.10": se verifica el mínimo declarado y el actual.
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Instalar el proyecto y sus dependencias de desarrollo
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Código muerto (vulture)
+        # Nació de un caso real: `coincide_termino` se construyó, se testeó y nunca
+        # se cableó a producción, así que el término de búsqueda no filtraba nada.
+        # Los tests no lo ven —ellos SÍ lo llamaban—; solo un análisis de alcance
+        # sobre `src/` lo delata. Config en [tool.vulture] de pyproject.toml.
+        run: vulture
+
+      - name: Tests
+        # La suite es OFFLINE por diseño: los conectores reciben `fetch`/`post`
+        # inyectados y los imports de red son perezosos. Si un test empieza a tardar
+        # decenas de segundos, es que se le escapó una petición real.
+        run: pytest -q
