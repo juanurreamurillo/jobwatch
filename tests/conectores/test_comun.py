@@ -77,6 +77,7 @@ def test_ejecutar_error_en_pagina1_es_error():
     def boom(u): raise RuntimeError("bloqueado")
     r = ejecutar(Criterios(terminos="x"), url_fn, boom, lambda h, c: ([], 0, 0))
     assert r.estado is EstadoConector.ERROR
+    assert "bloqueado" in r.detalle.lower()
 
 
 def test_ejecutar_error_tras_pagina1_es_parcial():
@@ -90,3 +91,21 @@ def test_ejecutar_error_tras_pagina1_es_parcial():
     assert r.estado is EstadoConector.OK
     assert [v.titulo for v in r.vacantes] == ["tp1"]
     assert "página 2" in r.detalle.lower() or "pagina 2" in r.detalle.lower()
+
+
+def test_ejecutar_reporta_filas_omitidas_en_detalle():
+    def url_fn(c, p):
+        return f"p{p}" if p <= 2 else ""
+    def extraer(html, c):
+        if html == "":
+            return ([], 0, 0)
+        return ([_v(html)], 2, 5)   # 2 omitidas por página, 5 crudas
+    r = ejecutar(Criterios(terminos="x"), url_fn, lambda u: u, extraer)
+    assert r.estado is EstadoConector.OK
+    assert "omitidas" in r.detalle.lower()
+
+
+def test_ejecutar_extraer_lanza_en_pagina1_es_error():
+    def extraer(html, c): raise ValueError("html corrupto")
+    r = ejecutar(Criterios(terminos="x"), lambda c, p: f"p{p}", lambda u: u, extraer)
+    assert r.estado is EstadoConector.ERROR
