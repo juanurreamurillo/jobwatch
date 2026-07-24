@@ -48,7 +48,7 @@ def test_url_remoto_pubdate_paginado():
     assert "/trabajo-de-gerente-de-proyectos-en-remoto" in u
     assert "pubdate=3" in u          # menor de {1,3,7,15} >= 2
     assert "by=publicationtime" in u
-    assert "p=2" in u
+    assert "&p=2" in u
 
 
 def test_url_sin_modalidad_ni_dias():
@@ -62,3 +62,16 @@ def test_extraer_puebla_fecha_cruda_y_ncrudo():
     assert len(vacantes) >= 1
     # al menos una con la fecha CRUDA poblada (texto relativo; el core la normaliza)
     assert any(v.fecha_publicacion for v in vacantes)
+
+
+def test_extraer_modalidad_remoto_viene_de_criterios_no_de_la_tarjeta():
+    criterios = Criterios(terminos="gerente", modalidad=Modalidad.REMOTO)
+    vacantes, _, _ = _extraer(FIXTURE, criterios)
+    assert len(vacantes) >= 1
+    assert all(v.modalidad is Modalidad.REMOTO for v in vacantes)
+
+
+def test_extraer_sin_modalidad_en_criterios_es_desconocida():
+    vacantes, _, _ = _extraer(FIXTURE, Criterios(terminos="gerente"))
+    assert len(vacantes) >= 1
+    assert all(v.modalidad is Modalidad.DESCONOCIDO for v in vacantes)

@@ -36,7 +36,7 @@ def _url(criterios: Criterios, pagina: int = 1) -> str:
     return f"{HOST}{ruta}{qs}"
 
 
-def _a_vacante(art) -> Vacante:
+def _a_vacante(art, criterios: Criterios) -> Vacante:
     a = art.select_one("h2 a.js-o-link")
     href = a.get("href", "").split("#")[0] if a else ""
     empresa = art.select_one("a[offer-grid-article-company-url]")
@@ -47,7 +47,11 @@ def _a_vacante(art) -> Vacante:
     smin, smax = parsear_salario(salario_raw) if salario_raw else (None, None)
     fecha_el = art.select_one("p.fs13.fc_aux")
     fecha_raw = texto(fecha_el) or None  # texto relativo crudo; el core lo normaliza (D22)
-    modalidad = Modalidad.REMOTO if "-en-remoto" in href or "remoto" in texto(art).lower() else Modalidad.DESCONOCIDO
+    # La modalidad no se raspa de la tarjeta: el server ya filtra por -en-remoto
+    # en la URL de búsqueda cuando criterios.modalidad es REMOTO, así que todas
+    # las ofertas devueltas en esa ruta son remotas.
+    es_remoto = criterios.modalidad is Modalidad.REMOTO
+    modalidad = Modalidad.REMOTO if es_remoto else Modalidad.DESCONOCIDO
     return Vacante(
         id_nativo=art.get("data-id", ""),
         portal="computrabajo",
@@ -70,7 +74,7 @@ def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
     omitidas = 0
     for art in arts:
         try:
-            v = _a_vacante(art)
+            v = _a_vacante(art, criterios)
             if not v.id_nativo or not v.titulo:
                 omitidas += 1
                 continue
