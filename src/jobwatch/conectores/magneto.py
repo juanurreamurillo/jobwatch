@@ -1,65 +1,88 @@
 from __future__ import annotations
 
-from bs4 import BeautifulSoup
+import json
+import re
 
-from jobwatch.conectores._comun import (
-    coincide_termino, ejecutar, id_de_url, texto,
-)
-from jobwatch.modelos import Criterios, ResultadoConector, Vacante
-from jobwatch.normalizar import normalizar_ubicacion, parsear_salario
+from jobwatch.conectores._comun import ejecutar, slug
+from jobwatch.modelos import Criterios, Modalidad, ResultadoConector, Vacante
+from jobwatch.normalizar import normalizar_ubicacion
 
 HOST = "https://www.magneto365.com"
 
-
-def _url(criterios: Criterios) -> str:
-    from urllib.parse import quote_plus
-
-    # NOTA (D5): ?search= no filtra el listado (feed genérico); el filtrado real
-    # es client-side por término. Reconfirmar el parámetro correcto en un probe futuro.
-    return f"{HOST}/co/trabajos/buscar?search={quote_plus(criterios.terminos)}"
+_PUSH_RE = re.compile(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
 
 
-def _a_vacante(art) -> Vacante:
-    a = art.select_one('h2 a[href*="/co/empleos/"]')
-    url = a.get("href", "")
-    h3 = art.select_one("h3")
-    empresa = texto(h3).split("|")[0].strip()
-    ps = art.select("p")
-    salario_raw = texto(ps[0]) if ps else ""
-    ubicacion = texto(ps[1]) if len(ps) > 1 else ""
-    smin, smax = parsear_salario(salario_raw)
+def _url(criterios: Criterios, pagina: int = 1) -> str:
+    ruta = f"/co/trabajos/buscar/{slug(criterios.terminos)}"
+    if pagina > 1:
+        ruta += f"/pagina-{pagina}"
+    return f"{HOST}{ruta}"
+
+
+def _reconstruir_flight(html: str) -> str:
+    """Concatena los payloads de self.__next_f.push([1,"..."]) decodificando cada
+    uno como literal JSON (preserva UTF-8 y \\uXXXX; no rompe multibyte)."""
+    trozos = _PUSH_RE.findall(html)
+    return "".join(json.loads(t) for t in trozos)
+
+
+def _rows_del_flight(html: str) -> list[dict]:
+    """Aísla el array `"rows":[...]` de vacantes del flight y lo parsea con
+    raw_decode. Se queda con el array cuyos objetos traen publishDate."""
+    flight = _reconstruir_flight(html)
+    dec = json.JSONDecoder()
+    idx = 0
+    while (j := flight.find('"rows":', idx)) != -1:
+        b = flight.find("[", j)
+        try:
+            arr, end = dec.raw_decode(flight, b)
+            idx = end
+        except json.JSONDecodeError:
+            idx = j + 7
+            continue
+        if isinstance(arr, list) and any(
+            isinstance(x, dict) and "publishDate" in x for x in arr
+        ):
+            return [x for x in arr if isinstance(x, dict) and "id" in x]
+    return []
+
+
+def _a_vacante(row: dict) -> Vacante:
+    cities = row.get("cities") or []
+    pub = str(row.get("publishDate") or "")
+    fecha = pub[:10] if pub[:2] == "20" else None
     return Vacante(
-        id_nativo=id_de_url(url),
+        id_nativo=str(row.get("id", "")),
         portal="magneto",
-        titulo=a.get("title") or texto(a),
-        empresa=empresa,
-        ubicacion=normalizar_ubicacion(ubicacion),
-        salario_raw=salario_raw,
-        salario_min=smin,
-        salario_max=smax,
-        url=url,
+        titulo=str(row.get("title", "")),
+        empresa=str(row.get("companyName", "")),
+        ubicacion=normalizar_ubicacion(str(cities[0]) if cities else ""),
+        modalidad=Modalidad.REMOTO if row.get("isRemote") else Modalidad.DESCONOCIDO,
+        salario_raw=str(row.get("salary", "") or ""),
+        salario_min=row.get("minSalary"),
+        salario_max=row.get("maxSalary"),
+        url=f"{HOST}/co/empleos/{row.get('jobSlug', '')}",
+        fecha_publicacion=fecha,
     )
 
 
-def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int]:
-    sopa = BeautifulSoup(html, "lxml")
+def _extraer(html: str, criterios: Criterios) -> tuple[list[Vacante], int, int]:
+    rows = _rows_del_flight(html)
     vacantes: list[Vacante] = []
     omitidas = 0
-    for art in sopa.select("article"):
-        if art.select_one('h2 a[href*="/co/empleos/"]') is None:
-            continue  # no es un card de oferta (p. ej. el panel de detalle)
+    for row in rows:
         try:
-            v = _a_vacante(art)
+            v = _a_vacante(row)
             if not v.id_nativo or not v.titulo:
                 omitidas += 1
                 continue
-            if not coincide_termino(v.titulo, criterios.terminos):
-                continue  # el feed no filtra; descartar lo que no coincide
+            if criterios.modalidad is Modalidad.REMOTO and v.modalidad is not Modalidad.REMOTO:
+                continue  # filtro remoto local (server no lo hace en la ruta de término)
             vacantes.append(v)
         except Exception:
             omitidas += 1
-    return vacantes, omitidas
+    return vacantes, omitidas, len(rows)  # n_crudo = filas crudas del flight
 
 
 def buscar(criterios: Criterios, fetch=None) -> ResultadoConector:
-    return ejecutar(criterios, _url, fetch, _extraer)
+    return ejecutar(criterios, _url, fetch, _extraer, pausa=1.5)
