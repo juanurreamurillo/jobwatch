@@ -50,9 +50,21 @@ volumen. Repo público `github.com/juanurreamurillo/jobwatch`.
 
 ## Next Steps
 
-1. **Sondear https://vacantes.com/** como conector nuevo (pedido de Juan, 2026-07-24).
-   Seguir el runbook de Fase 0 de `docs/endpoints.md`; **abrir los bundles con
-   `jsluice`**, no solo el documento.
+1. **Sondear portales nuevos** (pedido de Juan, 2026-07-24). Seguir el runbook de
+   Fase 0 de `docs/endpoints.md`; **abrir los bundles con `jsluice`**, no solo el
+   documento. Cada uno trae una pregunta propia que conviene resolver **antes** de
+   escribir el conector:
+   - **https://vacantes.com/** — sin particularidad conocida; sondeo estándar.
+   - **https://www.occ.com.mx/** — es **mexicana**, y eso no es un conector más: hoy
+     jobwatch asume Colombia en varios sitios (`country_indeed="colombia"`, dominios
+     `co.`, `normalizar_ubicacion` con ciudades colombianas, salarios en COP). Abre
+     una **dimensión de geografía que `Criterios` no modela**.
+   - **https://www.jobleads.com/co/jobs** — es un **agregador**, no una bolsa. Dos
+     riesgos a verificar primero: (a) puede exigir registro/pago para ver la oferta
+     completa, lo que choca con "solo lo que una búsqueda pública ya muestra"
+     (`CONTRIBUTING.md`); (b) al re-publicar vacantes de otros portales, va a
+     **colisionar con el dedup** — buen caso de prueba para el fingerprint de
+     contenido, o fuente de ruido duplicado si el fingerprint no aguanta.
 2. **Migrar a un ruff más estricto en su propio PR**, con su limpieza: 51 hallazgos
    preexistentes (BLE001 sobre los `except` genéricos que SON el patrón fail-loud,
    I001, DTZ011, S112, UP035). No colarlo de rebote en un PR de conectores.
