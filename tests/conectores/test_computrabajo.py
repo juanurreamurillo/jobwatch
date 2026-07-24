@@ -51,6 +51,15 @@ def test_url_remoto_pubdate_paginado():
     assert "&p=2" in u
 
 
+def test_url_dias_excede_max_pubdate_no_filtra_server():
+    c = Criterios(terminos="gerente", modalidad=Modalidad.REMOTO, dias=30)
+    u = _url(c, 1)
+    assert "/trabajo-de-gerente-de-proyectos-en-remoto" not in u  # slug diferente, pero cumple lógica
+    assert "pubdate=" not in u  # dias>15 no manda pubdate
+    assert "by=publicationtime" not in u
+    # Sin params de pubdate, la URL base solo tiene /trabajo-de-gerente-en-remoto (sin ?p=1 porque es página 1)
+
+
 def test_url_sin_modalidad_ni_dias():
     u = _url(Criterios(terminos="gerente"), 1)
     assert u.endswith("/trabajo-de-gerente")   # sin -en-remoto, sin params, p=1 implícito/omitido

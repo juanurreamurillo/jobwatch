@@ -19,7 +19,7 @@ def _pubdate_para(dias: int | None) -> int | None:
     for v in _PUBDATE:
         if v >= dias:
             return v
-    return _PUBDATE[-1]
+    return None
 
 
 def _url(criterios: Criterios, pagina: int = 1) -> str:
